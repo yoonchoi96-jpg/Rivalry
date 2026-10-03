@@ -53,6 +53,45 @@ def rivalry_tool_definitions() -> list[dict[str, Any]]:
         },
         {
             "type": "function",
+            "name": "get_rival_profile",
+            "description": "Return a structured strategic profile for a competitor.",
+            "parameters": {
+                "type": "object",
+                "properties": {"competitor_id": {"type": "string"}},
+                "required": ["competitor_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+        {
+            "type": "function",
+            "name": "get_market_pulse",
+            "description": "Return recent market-level price, product, promotion, and review signals.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "business_id": {"type": "string"},
+                    "days": {"type": "integer", "minimum": 1, "maximum": 90},
+                },
+                "required": ["business_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+        {
+            "type": "function",
+            "name": "get_predictions",
+            "description": "Return existing competitor behavior predictions and their evidence.",
+            "parameters": {
+                "type": "object",
+                "properties": {"competitor_id": {"type": "string"}},
+                "required": ["competitor_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+        {
+            "type": "function",
             "name": "get_cost_signals",
             "description": "Return external input-cost and market signals relevant to a product or price change.",
             "parameters": {
