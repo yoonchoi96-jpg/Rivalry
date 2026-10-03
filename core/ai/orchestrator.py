@@ -58,12 +58,7 @@ class MultiAIOrchestrator:
         final = self.synthesizer.respond(
             request.model_copy(update={"message": synthesis_prompt})
         )
-        return final.model_copy(
-            update={
-                "model": f"multi-ai->{final.model}",
-                "context": None,
-            }
-        )
+        return final.model_copy(update={"model": f"multi-ai->{final.model}"})
 
     def _fan_out(self, names: list[str], prompt: str) -> list[ProviderResult]:
         def call(name: str) -> ProviderResult:
