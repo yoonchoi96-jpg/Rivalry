@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from .evidence import AIProviderEvidence
 from .gateway import OpenAIGateway
 from .models import AIRequest, AIResponse
 from .providers import ProviderRegistry, ProviderResult
@@ -48,7 +49,23 @@ class MultiAIOrchestrator:
             f"FINDINGS:\n{evidence}"
         )
         final = self.synthesizer.respond(request.model_copy(update={"message": synthesis_prompt}))
-        return final.model_copy(update={"model": f"multi-ai->{final.model}"})
+        evidence_items = [
+            AIProviderEvidence(
+                provider=item.provider,
+                model=item.model,
+                available=item.available,
+                text=item.text,
+                error=item.error,
+            ).model_dump()
+            for item in results
+        ]
+        available_count = sum(1 for item in results if item.available and item.text)
+        confidence = min(100.0, 40.0 + available_count * 20.0) if results else 0.0
+        return final.model_copy(update={
+            "model": f"multi-ai->{final.model}",
+            "confidence": confidence,
+            "evidence": evidence_items,
+        })
 
     def _fan_out(self, names: list[str], prompt: str) -> list[ProviderResult]:
         def call(name: str) -> ProviderResult:
