@@ -23,6 +23,7 @@ class CostSignalType(StrEnum):
 class Change(BaseModel):
     id: str
     business_id: str | None = None
+    business_id: str | None = None
     competitor_id: str
     type: str
     before: object | None = None
