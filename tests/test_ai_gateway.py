@@ -29,7 +29,7 @@ def test_gateway_routes_chat_to_default_model():
     result = gateway.respond(AIRequest(message="오늘 뭐 달라졌어?"))
 
     assert result.text == "테스트 응답"
-    assert result.model == "gpt-6-luna"
+    assert result.model == "gpt-5.6-luna"
     assert client.responses.last["model"] == "gpt-6-luna"
 
 
@@ -43,6 +43,6 @@ def test_gateway_uses_expert_model_and_preserves_tools():
         tools=tools,
     )
 
-    assert result.model == "gpt-6-astra"
+    assert result.model == "gpt-5.6-sol"
     assert client.responses.last["tools"] == tools
     assert result.usage["total_tokens"] == 15
