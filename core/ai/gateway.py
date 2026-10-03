@@ -43,6 +43,10 @@ class OpenAIGateway:
             input=request.message,
             tools=tools or None,
         )
+        return self._response_from(response, model)
+
+    @staticmethod
+    def _response_from(response: Any, model: str) -> AIResponse:
         usage = {}
         if getattr(response, "usage", None):
             usage = {
@@ -55,7 +59,7 @@ class OpenAIGateway:
                 if value is not None
             }
         return AIResponse(
-            text=response.output_text,
+            text=getattr(response, "output_text", ""),
             model=model,
             response_id=getattr(response, "id", None),
             usage=usage,
