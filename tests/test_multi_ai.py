@@ -22,11 +22,15 @@ class FakeSynthesizer:
             model="gpt-test",
             response_id="final",
             usage={},
+            confidence=0,
+            evidence=[],
             model_copy=lambda update: SimpleNamespace(
                 text="통합 판단",
                 model=update["model"],
                 response_id="final",
                 usage={},
+                confidence=update.get("confidence", 0),
+                evidence=update.get("evidence", []),
             ),
         )
 
