@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException
 
-from core.ai.gateway import OpenAIGateway
 from core.ai.models import AIRequest, AIResponse
-from core.ai.tools import rivalry_tool_definitions
+from core.ai.runtime import AIRuntime
+from core.ai.tool_registry import RivalryToolRegistry
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -10,6 +10,8 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 @router.post("/chat", response_model=AIResponse)
 def chat(request: AIRequest):
     try:
-        return OpenAIGateway().respond(request, tools=rivalry_tool_definitions())
+        registry = RivalryToolRegistry()
+        runtime = AIRuntime(handlers=registry.handlers_for_runtime())
+        return runtime.run(request, tools=registry.definitions())
     except Exception as exc:
         raise HTTPException(status_code=502, detail="AI provider request failed") from exc
