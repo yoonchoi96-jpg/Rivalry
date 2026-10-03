@@ -7,9 +7,9 @@ from .models import AIRequest, AIResponse, AIUseCase
 
 
 DEFAULT_MODELS = {
-    AIUseCase.CHAT: "gpt-5.6-luna",
-    AIUseCase.INTELLIGENCE: "gpt-5.6-terra",
-    AIUseCase.EXPERT: "gpt-5.6-sol",
+    AIUseCase.CHAT: os.getenv("RIVALRY_AI_CHAT_MODEL", "gpt-6-luna"),
+    AIUseCase.INTELLIGENCE: os.getenv("RIVALRY_AI_INTELLIGENCE_MODEL", "gpt-6.1-sol"),
+    AIUseCase.EXPERT: os.getenv("RIVALRY_AI_EXPERT_MODEL", "gpt-6-astra"),
 }
 
 
