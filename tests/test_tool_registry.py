@@ -20,3 +20,11 @@ def test_registry_uses_intelligence_store():
         {"competitor_id": "comp", "days": 30}
     )
     assert result[0]["id"] == "c1"
+
+
+def test_registry_exposes_all_intelligence_tools():
+    registry = RivalryToolRegistry(intelligence_store=IntelligenceStore())
+    handlers = registry.handlers_for_runtime()
+    for name in registry.TOOL_NAMES:
+        assert name in handlers
+        assert callable(handlers[name])
