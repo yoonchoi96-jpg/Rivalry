@@ -22,11 +22,12 @@ class CostSignalType(StrEnum):
 
 class Change(BaseModel):
     id: str
+    business_id: str | None = None
     competitor_id: str
     type: str
     before: object | None = None
     after: object | None = None
-    magnitude: float = 0
+    magnitude: float = Field(default=0, ge=0, le=100)
     severity: str = "info"
     impact_score: float = Field(0, ge=0, le=100)
     confidence: float = Field(0, ge=0, le=100)
