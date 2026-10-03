@@ -49,3 +49,5 @@ def test_multi_ai_fans_out_and_synthesizes():
 
     assert result.text == "통합 판단"
     assert result.model == "multi-ai->gpt-test"
+    assert result.confidence == 100
+    assert {item["provider"] for item in result.evidence} == {"openai", "gemini", "perplexity"}
