@@ -12,7 +12,7 @@ class IntelligenceAlert(BaseModel):
     confidence: float = Field(ge=0, le=100)
     likely_cause: str
     recommended_action: str
-    evidence_ids: list[str] = []
+    evidence_ids: list[str] = Field(default_factory=list)
 
 
 class AlertIntelligenceEngine:
