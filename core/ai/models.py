@@ -21,3 +21,5 @@ class AIResponse(BaseModel):
     model: str
     response_id: str | None = None
     usage: dict[str, int] = Field(default_factory=dict)
+    confidence: float = Field(default=0, ge=0, le=100)
+    evidence: list[dict[str, object]] = Field(default_factory=list)
