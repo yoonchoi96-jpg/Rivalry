@@ -1,3 +1,4 @@
-def impact_score(magnitude,frequency,market_relevance,competitor_importance,persistence):
- v=[max(0,min(100,float(x)))/100 for x in [magnitude,frequency,market_relevance,competitor_importance,persistence]]
- return round(100*(v[0]*v[1]*v[2]*v[3]*v[4])**0.2,2)
+def impact_score(magnitude, frequency, market_relevance, competitor_importance, persistence):
+    values=[max(0,min(100,float(v)))/100 for v in [magnitude,frequency,market_relevance,competitor_importance,persistence]]
+    score=100*(values[0]*values[1]*values[2]*values[3]*values[4])**0.2
+    return round(score,2)
