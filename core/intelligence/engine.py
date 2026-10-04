@@ -23,6 +23,19 @@ class IntelligenceStore:
     reviews: list[Review] = field(default_factory=list)
     predictions: list[Prediction] = field(default_factory=list)
     cost_signal_items: list[CostSignal] = field(default_factory=list)
+    alerts: list[dict[str, object]] = field(default_factory=list)
+
+    def record_changes(self, changes: list[Change]) -> None:
+        self.changes.extend(Change.model_validate(item.model_dump(mode="json")) for item in changes)
+
+    def record_reviews(self, reviews: list[Review]) -> None:
+        self.reviews.extend(Review.model_validate(item.model_dump(mode="json")) for item in reviews)
+
+    def record_prediction(self, prediction: Prediction) -> None:
+        self.predictions.append(Prediction.model_validate(prediction.model_dump(mode="json")))
+
+    def record_alert(self, alert: dict[str, object]) -> None:
+        self.alerts.append(dict(alert))
 
     def _recent(self, values, field_name: str, days: int):
         if days <= 0:
@@ -93,6 +106,9 @@ class IntelligenceStore:
     def predictions_for(self, competitor_id: str) -> list[Prediction]:
         return [p for p in self.predictions if p.competitor_id == competitor_id]
 
+    def alerts_for(self, competitor_id: str) -> list[dict[str, object]]:
+        return [a for a in self.alerts if str(a.get("competitor_id", "")) == competitor_id]
+
     def research_context(self, business_id: str | None = None, competitor_id: str | None = None) -> dict[str, object]:
         result: dict[str, object] = {}
         if business_id:
@@ -102,4 +118,5 @@ class IntelligenceStore:
             result["rival_profile"] = self.rival_profile(competitor_id)
             result["review_trends"] = self.review_trends(competitor_id, 30)
             result["predictions"] = [p.model_dump() for p in self.predictions_for(competitor_id)]
+            result["alerts"] = self.alerts_for(competitor_id)
         return result
