@@ -34,7 +34,9 @@ class MultiAIOrchestrator:
 
     def run(self, request: AIRequest, *, providers: list[str] | None = None) -> AIResponse:
         decision = self.router.select(request) if providers is None else None
-        names = providers if providers is not None else self._adaptive_names(request, decision.providers)
+        candidates = decision.providers if decision is not None else list(dict.fromkeys(providers or []))
+        names = providers if providers is not None else self._adaptive_names(request, candidates)
+        routing = self._routing_metadata(request, candidates, names, decision)
 
         if not names:
             return AIResponse(text="선택된 AI provider가 없습니다.", model="multi-ai", usage={})
@@ -91,6 +93,7 @@ class MultiAIOrchestrator:
             "model": f"multi-ai->{final.model}",
             "confidence": confidence,
             "evidence": evidence_items,
+            "routing": routing,
         })
 
     def _fan_out(self, names: list[str], prompt: str) -> list[ProviderResult]:
@@ -145,6 +148,20 @@ class MultiAIOrchestrator:
 
     def _adaptive_names(self, request: AIRequest, candidates: list[str]) -> list[str]:
         return self.adaptive_router.select(request, candidates)
+
+    def _routing_metadata(self, request, candidates, selected, decision):
+        ranked = self.adaptive_router.rank(request, candidates)
+        return {
+            "reason": decision.reason if decision is not None else "explicit provider selection",
+            "candidates": list(dict.fromkeys(candidates)),
+            "selected": list(selected),
+            "scores": [
+                {"provider": item.provider, "score": item.score, "suitability": item.suitability,
+                 "capability": item.capability, "quality": item.quality, "latency": item.latency,
+                 "cost": item.cost, "exploration": item.exploration}
+                for item in ranked
+            ],
+        }
 
     @staticmethod
     def _system() -> str:
