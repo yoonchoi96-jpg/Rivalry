@@ -15,6 +15,8 @@ class ProviderResult:
     text: str
     available: bool = True
     error: str | None = None
+    latency_ms: int | None = None
+    usage: dict[str, int] = None
 
 
 class AIProvider(ABC):
