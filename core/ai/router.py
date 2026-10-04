@@ -64,3 +64,12 @@ class AIRouter:
     @staticmethod
     def _needs_deep_analysis(text):
         return any(k in text for k in ("왜","원인","전략","심층","분석","예측","why","cause","strategy","predict"))
+
+
+    def limit_candidates(self, names: list[str], use_case: AIUseCase, health=None) -> list[str]:
+        """Keep fan-out bounded and skip temporarily unavailable names."""
+        names = list(dict.fromkeys(names))
+        if health is not None:
+            names = [name for name in names if health.allow(name)]
+        limit = {AIUseCase.CHAT: 1, AIUseCase.INTELLIGENCE: 3, AIUseCase.EXPERT: 3}[use_case]
+        return names[:limit]
