@@ -38,7 +38,10 @@ class FakeRedis:
 
     def zrangebyscore(self, key, minimum, maximum):
         return [value for value, score in self.delayed.items() if minimum <= score <= maximum]
-\n    def zcard(self, key):\n        return len(self.delayed)\n
+
+    def zcard(self, key):
+        return len(self.delayed)
+
     def zrem(self, key, value):
         self.delayed.pop(value, None)
 
