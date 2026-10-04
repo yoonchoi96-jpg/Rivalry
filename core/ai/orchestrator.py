@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import perf_counter
 
 from .evidence import AIProviderEvidence
 from .gateway import OpenAIGateway
@@ -60,6 +61,8 @@ class MultiAIOrchestrator:
                 model=item.model,
                 available=item.available,
                 text=item.text,
+                latency_ms=item.latency_ms,
+                usage=item.usage or {},
                 error=item.error,
             ).model_dump()
             for item in results
@@ -74,12 +77,28 @@ class MultiAIOrchestrator:
 
     def _fan_out(self, names: list[str], prompt: str) -> list[ProviderResult]:
         def call(name: str) -> ProviderResult:
+            started = perf_counter()
             try:
                 provider = self.registry.by_name(name)
-                return provider.generate(prompt, system=self._system())
+                result = provider.generate(prompt, system=self._system())
+                return ProviderResult(
+                    provider=result.provider,
+                    model=result.model,
+                    text=result.text,
+                    available=result.available,
+                    error=result.error,
+                    latency_ms=int((perf_counter() - started) * 1000),
+                    usage=result.usage or {},
+                )
             except Exception as exc:
                 return ProviderResult(
-                    provider=name, model="", text="", available=False, error=exc.__class__.__name__
+                    provider=name,
+                    model="",
+                    text="",
+                    available=False,
+                    error=exc.__class__.__name__,
+                    latency_ms=int((perf_counter() - started) * 1000),
+                    usage={},
                 )
 
         worker_count = max(1, min(self.max_workers, len(names)))
