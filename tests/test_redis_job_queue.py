@@ -93,3 +93,5 @@ def test_delayed_requeue_and_dlq_replay(monkeypatch):
     replayed = queue.replay_dead_letter(job.id)
     assert replayed is not None
     assert replayed.status.value == "queued"
+
+# CI trigger: exercise the reliability test suite on pull-request synchronization.
