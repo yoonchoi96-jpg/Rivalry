@@ -36,6 +36,7 @@ class RedisJobQueue:
         self.reclaim_after_ms = reclaim_after_ms
         self.delayed_key = f"{stream}:delayed"
         self.dead_letter_stream = f"{stream}:dead-letter"
+        self.idempotency_prefix = f"{stream}:idempotency:"
         self._message_ids: dict[str, str] = {}
         self._ensure_group()
 
@@ -47,11 +48,25 @@ class RedisJobQueue:
                 raise
 
     def enqueue(self, job: Job) -> Job:
+        if job.idempotency_key:
+            existing = self.job_store.get_by_idempotency_key(job.idempotency_key)
+            if existing is not None:
+                return existing
+            claimed = self.client.set(
+                f"{self.idempotency_prefix}{job.idempotency_key}",
+                job.id,
+                nx=True,
+            )
+            if not claimed:
+                return self.job_store.get_by_idempotency_key(job.idempotency_key) or job
+
         job.status = JobStatus.QUEUED
         job.next_attempt_at = None
-        self.job_store.save(job)
-        self.client.xadd(self.stream, {"job": json.dumps(job.model_dump(mode="json"))})
-        return self.job_store.get(job.id) or job
+        canonical = self.job_store.save(job)
+        if canonical.id != job.id:
+            return canonical
+        self.client.xadd(self.stream, {"job": json.dumps(canonical.model_dump(mode="json"))})
+        return self.job_store.get(canonical.id) or canonical
 
     def _decode_entry(self, entry: tuple[str, dict[str, str]]) -> Job:
         message_id, fields = entry
