@@ -175,7 +175,7 @@ def test_adaptive_selection_learns_from_results():
         AIRequest(message="최근 시장을 분석해줘", use_case="intelligence")
     )
     assert len(first.evidence) == 3
-    assert 1 <= len(orchestrator.provider_performance) <= 3
+    assert 1 <= len(orchestrator.adaptive_router.performance) <= 3
     second = orchestrator.run(
         AIRequest(message="최근 시장을 분석해줘", use_case="intelligence")
     )
