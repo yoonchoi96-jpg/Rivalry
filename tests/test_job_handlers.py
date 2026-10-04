@@ -57,3 +57,12 @@ def test_process_intelligence_returns_recommendation():
     result = handlers.process_intelligence(job)
     assert result["change_id"] == "ch1"
     assert result["recommendation"]["action"] == "monitor_before_matching_price"
+
+
+def test_build_alert_returns_actionable_alert():
+    handlers = JobHandlers()
+    change = {"id": "ch1", "competitor_id": "c1", "type": "PRICE_CHANGED", "magnitude": 10, "impact_score": 72, "detected_at": "2026-10-04T00:00:00Z"}
+    intelligence = {"summary": "Material price change", "confidence": 80, "hypotheses": [{"type": "cost"}], "recommendation": {"action": "monitor_before_matching_price"}}
+    result = handlers.build_alert(Job(type=JobType.BUILD_ALERT, payload={"change": change, "intelligence": intelligence}))
+    assert result["likely_cause"] == "cost"
+    assert result["recommended_action"] == "monitor_before_matching_price"
