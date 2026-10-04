@@ -211,3 +211,28 @@ def test_adaptive_routing_prefers_lower_relative_cost_when_quality_is_equal():
         AIRequest(message="일반 분석", use_case="chat"), candidates
     )
     assert selected == ["deepseek"]
+
+def test_adaptive_routing_uses_capability_signal():
+    registry = ProviderRegistry([
+        FakeProvider("openai", "일반 분석"),
+        FakeProvider("perplexity", "최신 시장 뉴스"),
+    ])
+    orchestrator = MultiAIOrchestrator(registry=registry, synthesizer=FakeSynthesizer())
+    selected = orchestrator._adaptive_names(
+        AIRequest(message="오늘 최신 시장 뉴스를 확인해줘", use_case="chat"),
+        ["openai", "perplexity"],
+    )
+    assert selected == ["perplexity"]
+
+
+def test_adaptive_routing_uses_korean_specialist_signal():
+    registry = ProviderRegistry([
+        FakeProvider("openai", "일반 분석"),
+        FakeProvider("naver", "한국 시장 분석"),
+    ])
+    orchestrator = MultiAIOrchestrator(registry=registry, synthesizer=FakeSynthesizer())
+    selected = orchestrator._adaptive_names(
+        AIRequest(message="한국 시장 경쟁사 동향을 분석해줘", use_case="chat"),
+        ["openai", "naver"],
+    )
+    assert selected == ["naver"]
