@@ -51,6 +51,7 @@ def test_worker_exponential_backoff_is_recorded():
     )
     first = worker.run_once()
     assert first.next_attempt_at is not None
+    first_next_attempt_at = first.next_attempt_at
     second = worker.run_once()
     assert second.next_attempt_at is not None
-    assert second.next_attempt_at > first.next_attempt_at
+    assert second.next_attempt_at > first_next_attempt_at
