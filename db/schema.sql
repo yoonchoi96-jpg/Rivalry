@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS changes (
 CREATE TABLE IF NOT EXISTS reviews (
     id TEXT PRIMARY KEY, competitor_id TEXT NOT NULL, rating DOUBLE PRECISION,
     text TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL, sentiment TEXT,
-    topics_json JSONB NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT '',
-    confidence DOUBLE PRECISION NOT NULL DEFAULT 0
+    topics_json JSONB NOT NULL DEFAULT '[]', product_id TEXT,
+    source TEXT NOT NULL DEFAULT '', confidence DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS cost_signals (
     id TEXT PRIMARY KEY, product_id TEXT, type TEXT NOT NULL, name TEXT NOT NULL,
