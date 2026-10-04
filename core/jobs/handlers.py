@@ -88,14 +88,17 @@ class JobHandlers:
         if not isinstance(changes, list):
             raise ValueError("generate_prediction requires payload.changes")
         typed = [Change.model_validate(item) for item in changes if isinstance(item, dict)]
+        historical = self.store.competitor_history(competitor_id, days=30)
+        combined = historical + [change for change in typed if change.id not in {item.id for item in historical}]
         counts: dict[str, int] = {}
-        evidence: list[str] = []
-        for change in typed:
+        evidence_by_type: dict[str, list[str]] = {}
+        for change in combined:
             counts[change.type] = counts.get(change.type, 0) + 1
-            evidence.append(change.id)
+            evidence_by_type.setdefault(change.type, []).append(change.id)
         repeated = max(counts.items(), key=lambda item: item[1], default=(None, 0))
         if repeated[0] is None or repeated[1] < 2:
             return {"prediction": None, "reason": "insufficient repeated change evidence"}
+        evidence = evidence_by_type[repeated[0]]
         prediction = Prediction(id=str(uuid4()), competitor_id=competitor_id, prediction_type=f"repeat_{repeated[0].lower()}", predicted_at=datetime.now(timezone.utc).isoformat(), expected_window_days=7, probability=min(95, 55 + repeated[1] * 10), evidence_change_ids=evidence)
         self.store.record_prediction(prediction)
         return {"prediction": prediction.model_dump(mode="json")}
