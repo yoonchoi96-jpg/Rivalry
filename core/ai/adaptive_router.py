@@ -12,6 +12,7 @@ class ProviderProfile:
     suitability: dict[AIUseCase, float] = field(default_factory=dict)
     cost_score: float = 70.0
     default_latency_ms: float = 1500.0
+    capabilities: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -44,7 +45,7 @@ class AdaptiveAIRouter:
 
     @staticmethod
     def default_profiles() -> list[ProviderProfile]:
-        def p(name, chat, intelligence, expert, cost, latency):
+        def p(name, chat, intelligence, expert, cost, latency, capabilities=None):
             return ProviderProfile(
                 name=name,
                 suitability={
@@ -54,16 +55,17 @@ class AdaptiveAIRouter:
                 },
                 cost_score=cost,
                 default_latency_ms=latency,
+                capabilities=capabilities or {},
             )
         return [
-            p("openai", 100, 100, 100, 65, 1500),
-            p("perplexity", 82, 100, 92, 70, 1800),
-            p("claude", 86, 96, 100, 60, 1800),
-            p("gemini", 88, 94, 96, 90, 1300),
-            p("deepseek", 84, 90, 82, 100, 1200),
-            p("naver", 80, 88, 82, 88, 1400),
-            p("qwen", 82, 88, 86, 95, 1300),
-            p("grok", 80, 84, 82, 80, 1600),
+            p("openai", 100, 100, 100, 65, 1500, {"general": 95}),
+            p("perplexity", 82, 100, 92, 70, 1800, {"latest_web": 100, "market": 95}),
+            p("claude", 86, 96, 100, 60, 1800, {"deep_analysis": 100, "strategy": 100}),
+            p("gemini", 88, 94, 96, 90, 1300, {"deep_analysis": 95, "general": 90}),
+            p("deepseek", 84, 90, 82, 100, 1200, {"bulk": 100, "general": 88}),
+            p("naver", 80, 88, 82, 88, 1400, {"korean": 100, "korean_market": 100}),
+            p("qwen", 82, 88, 86, 95, 1300, {"china": 100, "chinese": 100}),
+            p("grok", 80, 84, 82, 80, 1600, {"social": 100, "trend": 100}),
         ]
 
     def select(self, request: AIRequest, candidates: list[str]) -> list[str]:
@@ -78,9 +80,11 @@ class AdaptiveAIRouter:
             profile = self.profiles.get(name, ProviderProfile(name=name))
             perf = self.performance.get(name, ProviderPerformance(default_latency_ms=profile.default_latency_ms))
             latency = self._latency_score(perf.latency_ms)
+            capability = self._capability_score(request.message.lower(), profile.capabilities)
             exploration = 95.0 if perf.samples == 0 else 70.0
             score = (
-                profile.suitability.get(request.use_case, 70.0) * 0.35
+                profile.suitability.get(request.use_case, 70.0) * 0.30
+                + capability * 0.15
                 + perf.quality * 0.25
                 + latency * 0.15
                 + profile.cost_score * 0.15
@@ -88,6 +92,26 @@ class AdaptiveAIRouter:
             )
             result.append(ProviderScore(name, round(score, 2), profile.suitability.get(request.use_case, 70.0), perf.quality, latency, profile.cost_score, exploration))
         return sorted(result, key=lambda x: (x.score, x.provider), reverse=True)
+
+
+    @staticmethod
+    def _capability_score(text: str, capabilities: dict[str, float]) -> float:
+        signals = {
+            "latest_web": ("최신", "오늘", "최근", "뉴스", "latest", "today", "news"),
+            "market": ("시장", "가격", "경쟁사", "market", "price", "competitor"),
+            "korean": ("한국", "국내", "네이버", "배민", "쿠팡", "korean", "korea"),
+            "korean_market": ("한국 시장", "국내 시장", "한국 소비자"),
+            "china": ("중국", "알리바바", "타오바오", "티몰", "china", "alibaba", "taobao"),
+            "chinese": ("중국어", "중문", "chinese"),
+            "social": ("sns", "소셜", "트위터", "x.com", "여론", "viral", "social"),
+            "trend": ("트렌드", "유행", "바이럴", "trend"),
+            "deep_analysis": ("분석", "심층", "원인", "왜", "analysis", "cause", "why"),
+            "strategy": ("전략", "예측", "strategy", "predict"),
+            "bulk": ("대량", "bulk", "일괄"),
+            "general": ("질문", "설명", "question", "explain"),
+        }
+        matches = [capabilities[key] for key, words in signals.items() if key in capabilities and any(w in text for w in words)]
+        return max(matches, default=70.0)
 
     def record(self, provider: str, quality: float, latency_ms: float | None) -> None:
         perf = self.performance.setdefault(provider, ProviderPerformance())
