@@ -26,19 +26,19 @@ class PostgresJobStore(JobStore):
                 """
                 INSERT INTO jobs (
                     id, type, payload_json, status, created_at, started_at,
-                    finished_at, error, result_json, attempts, max_attempts
+                    finished_at, error, result_json, attempts, max_attempts, next_attempt_at
                 )
                 VALUES (
                     %(id)s, %(type)s, %(payload_json)s, %(status)s,
                     %(created_at)s::timestamptz, %(started_at)s::timestamptz,
                     %(finished_at)s::timestamptz, %(error)s, %(result_json)s,
-                    %(attempts)s, %(max_attempts)s
+                    %(attempts)s, %(max_attempts)s, %(next_attempt_at)s::timestamptz
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     status=EXCLUDED.status, started_at=EXCLUDED.started_at,
                     finished_at=EXCLUDED.finished_at, error=EXCLUDED.error,
                     result_json=EXCLUDED.result_json, attempts=EXCLUDED.attempts,
-                    max_attempts=EXCLUDED.max_attempts
+                    max_attempts=EXCLUDED.max_attempts, next_attempt_at=EXCLUDED.next_attempt_at
                 """,
                 {
                     **row,
@@ -47,6 +47,7 @@ class PostgresJobStore(JobStore):
                     "result_json": Jsonb(row["result"]) if row["result"] is not None else None,
                     "attempts": job.attempts,
                     "max_attempts": job.max_attempts,
+                    "next_attempt_at": row["next_attempt_at"],
                 },
             )
         return job
@@ -56,7 +57,7 @@ class PostgresJobStore(JobStore):
             cur.execute(
                 """
                 SELECT id, type, payload_json, status, created_at, started_at,
-                       finished_at, error, result_json, attempts, max_attempts
+                       finished_at, error, result_json, attempts, max_attempts, next_attempt_at
                 FROM jobs WHERE id=%s
                 """,
                 (job_id,),
@@ -70,4 +71,5 @@ class PostgresJobStore(JobStore):
             started_at=row[5].isoformat() if row[5] and hasattr(row[5], "isoformat") else row[5],
             finished_at=row[6].isoformat() if row[6] and hasattr(row[6], "isoformat") else row[6],
             error=row[7], result=row[8], attempts=row[9], max_attempts=row[10],
+            next_attempt_at=row[11].isoformat() if row[11] and hasattr(row[11], "isoformat") else row[11],
         )
