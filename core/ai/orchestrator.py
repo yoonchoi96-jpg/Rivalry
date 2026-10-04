@@ -8,6 +8,7 @@ from .gateway import OpenAIGateway
 from .models import AIRequest, AIResponse
 from .providers import ProviderRegistry, ProviderResult
 from .quality import AIQualityScorer
+from .provider_health import ProviderHealth
 from .router import AIRouter
 
 
@@ -26,6 +27,8 @@ class MultiAIOrchestrator:
         self.router = router or AIRouter()
         self.max_workers = max_workers
         self.quality_scorer = AIQualityScorer()
+        self.provider_health = ProviderHealth()
+        self.max_retries = 2
 
     def run(self, request: AIRequest, *, providers: list[str] | None = None) -> AIResponse:
         decision = self.router.select(request) if providers is None else None
@@ -88,29 +91,48 @@ class MultiAIOrchestrator:
 
     def _fan_out(self, names: list[str], prompt: str) -> list[ProviderResult]:
         def call(name: str) -> ProviderResult:
-            started = perf_counter()
-            try:
-                provider = self.registry.by_name(name)
-                result = provider.generate(prompt, system=self._system())
-                return ProviderResult(
-                    provider=result.provider,
-                    model=result.model,
-                    text=result.text,
-                    available=result.available,
-                    error=result.error,
-                    latency_ms=int((perf_counter() - started) * 1000),
-                    usage=result.usage or {},
-                )
-            except Exception as exc:
+            if not self.provider_health.allow(name):
                 return ProviderResult(
                     provider=name,
                     model="",
                     text="",
                     available=False,
-                    error=exc.__class__.__name__,
-                    latency_ms=int((perf_counter() - started) * 1000),
+                    error="provider_temporarily_blocked",
+                    latency_ms=0,
                     usage={},
                 )
+
+            started = perf_counter()
+            last_error = "provider_failed"
+            for attempt in range(self.max_retries + 1):
+                try:
+                    provider = self.registry.by_name(name)
+                    result = provider.generate(prompt, system=self._system())
+                    self.provider_health.success(name)
+                    return ProviderResult(
+                        provider=result.provider,
+                        model=result.model,
+                        text=result.text,
+                        available=result.available,
+                        error=result.error,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        usage=result.usage or {},
+                    )
+                except Exception as exc:
+                    last_error = exc.__class__.__name__
+                    if attempt < self.max_retries:
+                        continue
+                    self.provider_health.failure(name, last_error)
+
+            return ProviderResult(
+                provider=name,
+                model="",
+                text="",
+                available=False,
+                error=last_error,
+                latency_ms=int((perf_counter() - started) * 1000),
+                usage={},
+            )
 
         worker_count = max(1, min(self.max_workers, len(names)))
         with ThreadPoolExecutor(max_workers=worker_count) as pool:
