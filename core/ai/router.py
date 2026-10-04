@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Mapping
 
 from .models import AIRequest, AIUseCase
 
@@ -14,6 +15,18 @@ class RoutingDecision:
 
 class AIRouter:
     """Selects the smallest useful provider set for a request."""
+
+    # Relative cost scores are configurable heuristics, not live API pricing.
+    COST_SCORE: Mapping[str, float] = {
+        "deepseek": 100.0,
+        "qwen": 95.0,
+        "gemini": 90.0,
+        "naver": 88.0,
+        "grok": 80.0,
+        "perplexity": 70.0,
+        "openai": 65.0,
+        "claude": 60.0,
+    }
 
     DEFAULTS = {
         AIUseCase.CHAT: ["openai"],
