@@ -84,10 +84,10 @@ class AdaptiveAIRouter:
             capability = self._capability_score(request.message.lower(), profile.capabilities)
             exploration = 95.0 if perf.samples == 0 else 70.0
             score = (
-                profile.suitability.get(request.use_case, 70.0) * 0.30
-                + capability * 0.15
+                profile.suitability.get(request.use_case, 70.0) * 0.25
+                + capability * 0.25
                 + perf.quality * 0.25
-                + latency * 0.15
+                + latency * 0.10
                 + profile.cost_score * 0.10
                 + exploration * 0.05
             )
