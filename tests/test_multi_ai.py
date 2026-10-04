@@ -92,3 +92,29 @@ def test_provider_evidence_contains_telemetry():
     evidence = result.evidence[0]
     assert evidence["latency_ms"] == 12
     assert evidence["usage"]["input_tokens"] == 10
+
+
+def test_provider_quality_score_is_exposed_in_evidence():
+    registry = ProviderRegistry([FakeProvider("openai", "충분히 긴 분석 결과입니다. 경쟁사 가격과 시장 변화의 관계를 설명합니다.")])
+    result = MultiAIOrchestrator(
+        registry=registry,
+        synthesizer=FakeSynthesizer(),
+    ).run(AIRequest(message="테스트"), providers=["openai"])
+
+    evidence = result.evidence[0]
+    assert 0 <= evidence["quality_score"] <= 100
+    assert evidence["quality_reasons"]
+    assert result.confidence == evidence["quality_score"]
+
+
+def test_unavailable_provider_quality_is_zero():
+    class BrokenProvider(FakeProvider):
+        def generate(self, prompt: str, *, system: str = "") -> ProviderResult:
+            return ProviderResult(self.name, self.model, "", available=False, error="down")
+
+    result = MultiAIOrchestrator(
+        registry=ProviderRegistry([BrokenProvider("openai", "")]),
+        synthesizer=FakeSynthesizer(),
+    ).run(AIRequest(message="테스트"), providers=["openai"])
+
+    assert result.text == "사용 가능한 AI provider가 없습니다."
