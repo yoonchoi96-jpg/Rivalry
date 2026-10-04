@@ -38,3 +38,19 @@ def test_worker_marks_terminal_failure_after_max_attempts():
     assert final.status == JobStatus.FAILED
     assert final.attempts == 2
     assert final.error == "permanent"
+
+
+def test_worker_exponential_backoff_is_recorded():
+    queue = InMemoryJobQueue()
+    job = Job(type=JobType.BUILD_ALERT, max_attempts=3)
+    queue.enqueue(job)
+    worker = JobWorker(
+        queue,
+        {JobType.BUILD_ALERT: lambda _job: (_ for _ in ()).throw(RuntimeError("temporary"))},
+        retry_base_seconds=2,
+    )
+    first = worker.run_once()
+    assert first.next_attempt_at is not None
+    second = worker.run_once()
+    assert second.next_attempt_at is not None
+    assert second.next_attempt_at > first.next_attempt_at
