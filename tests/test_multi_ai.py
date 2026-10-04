@@ -55,3 +55,18 @@ def test_multi_ai_fans_out_and_synthesizes():
     assert result.model == "multi-ai->gpt-test"
     assert result.confidence == 100
     assert {item["provider"] for item in result.evidence} == {"openai", "gemini", "perplexity"}
+
+
+def test_multi_ai_research_prompt_preserves_observed_intelligence():
+    request = AIRequest(
+        message="가격 변화 원인을 분석해줘",
+        business_id="biz-1",
+        context={"rivalry_intelligence": {"market_pulse": {"change_count": 2}}},
+    )
+    prompt = MultiAIOrchestrator._research_prompt(
+        request,
+        "explicit",
+        request.context["rivalry_intelligence"],
+    )
+    assert "Rivalry observed intelligence" in prompt
+    assert "change_count" in prompt
