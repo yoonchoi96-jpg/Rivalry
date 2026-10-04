@@ -118,3 +118,44 @@ def test_unavailable_provider_quality_is_zero():
     ).run(AIRequest(message="테스트"), providers=["openai"])
 
     assert result.text == "사용 가능한 AI provider가 없습니다."
+
+
+def test_provider_retries_then_recovers():
+    class FlakyProvider(FakeProvider):
+        attempts = 0
+
+        def generate(self, prompt: str, *, system: str = "") -> ProviderResult:
+            self.attempts += 1
+            if self.attempts < 2:
+                raise RuntimeError("temporary")
+            return ProviderResult(self.name, self.model, self.text)
+
+    provider = FlakyProvider("openai", "재시도 후 정상 응답")
+    result = MultiAIOrchestrator(
+        registry=ProviderRegistry([provider]),
+        synthesizer=FakeSynthesizer(),
+    ).run(AIRequest(message="테스트"), providers=["openai"])
+
+    assert provider.attempts == 2
+    assert result.evidence[0]["available"] is True
+
+
+def test_provider_health_blocks_repeated_failures():
+    class BrokenProvider(FakeProvider):
+        def generate(self, prompt: str, *, system: str = "") -> ProviderResult:
+            raise RuntimeError("down")
+
+    provider = BrokenProvider("openai", "")
+    orchestrator = MultiAIOrchestrator(
+        registry=ProviderRegistry([provider]),
+        synthesizer=FakeSynthesizer(),
+    )
+    orchestrator.max_retries = 0
+
+    for _ in range(3):
+        orchestrator.run(AIRequest(message="테스트"), providers=["openai"])
+
+    assert orchestrator.provider_health.allow("openai") is False
+    snapshot = orchestrator.provider_health.snapshot()["openai"]
+    assert snapshot["failures"] == 3
+    assert snapshot["blocked"] is True
