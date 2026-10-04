@@ -26,7 +26,7 @@ class JobHandlers:
         self.recommendations = recommendations or RecommendationService()
         self.reviews = reviews or ReviewIntelligenceService()
         self.store = store or IntelligenceStore()
-        self._snapshots: dict[str, dict[str, object]] = {}
+
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
         country = job.payload.get("country_code")
@@ -44,9 +44,9 @@ class JobHandlers:
             data[name] = method(competitor)
         normalized = normalize_collection(data)
         competitor_id = str(competitor.get("id", ""))
-        before = self._snapshots.get(competitor_id, {"prices": [], "products": []})
+        before = self.store.latest_snapshot(competitor_id) or {"prices": [], "products": []}
         changes = detect_changes(competitor_id, before, normalized, source=str(platform))
-        self._snapshots[competitor_id] = normalized
+        self.store.record_snapshot(competitor_id, normalized)
         typed_reviews = [Review.model_validate(item) for item in normalized["reviews"] if isinstance(item, dict)]
         self.store.record_changes(changes)
         self.store.record_reviews(typed_reviews)
