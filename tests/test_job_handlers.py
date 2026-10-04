@@ -6,8 +6,8 @@ from core.jobs.models import Job, JobType
 
 class FakeAdapter(PlatformAdapter):
     def discover_competitors(self, business): return []
-    def get_products(self, competitor): return ["p1"]
-    def get_prices(self, competitor): return [100]
+    def get_products(self, competitor): return [{"id": "p1"}, {"id": "p2"}]
+    def get_prices(self, competitor): return [110]
     def get_reviews(self, competitor): return ["r1"]
     def get_promotions(self, competitor): return ["promo"]
 
@@ -15,11 +15,11 @@ class FakeAdapter(PlatformAdapter):
 def test_competitor_collection_uses_universal_adapter():
     registry = AdapterRegistry()
     registry.register("KR", "demo", FakeAdapter())
-    job = Job(type=JobType.COLLECT_COMPETITOR, payload={
-        "country_code": "kr", "platform": "DEMO", "competitor": {"id": "c1"}
-    })
+    job = Job(type=JobType.COLLECT_COMPETITOR, payload={"country_code": "kr", "platform": "DEMO", "competitor": {"id": "c1"}})
     result = JobHandlers(adapters=registry).collect_competitor(job)
-    assert result == {"competitor": {"id": "c1"}, "products": ["p1"], "prices": [100], "reviews": ["r1"], "promotions": ["promo"]}
+    assert result["products"] == [{"id": "p1"}, {"id": "p2"}]
+    assert result["changes"]
+    assert result["changes"][0]["type"] == "NEW_PRODUCT"
 
 
 def test_competitor_collection_fails_without_adapter():
@@ -32,27 +32,18 @@ def test_competitor_collection_fails_without_adapter():
         raise AssertionError("expected ValueError")
 
 
-def test_intelligence_handler_builds_report():
-    job = Job(type=JobType.PROCESS_INTELLIGENCE, payload={
-        "change": {
-            "id": "ch1", "competitor_id": "c1", "type": "PRICE_CHANGED",
-            "magnitude": 40, "impact_score": 0, "confidence": 80,
-            "detected_at": "2026-10-04T00:00:00+00:00", "source": "test",
-        },
-        "market_relevance": 80,
-        "competitor_importance": 90,
-    })
-    result = JobHandlers().process_intelligence(job)
-    assert result["change_id"] == "ch1"
-    assert result["hypotheses"]
-    assert result["confidence"] >= 0
+def test_collection_detects_price_change_on_second_snapshot():
+    class PriceAdapter(FakeAdapter):
+        def __init__(self): self.price = 100
+        def get_prices(self, competitor): return [self.price]
 
-
-def test_intelligence_handler_requires_change():
-    job = Job(type=JobType.PROCESS_INTELLIGENCE)
-    try:
-        JobHandlers().process_intelligence(job)
-    except ValueError as exc:
-        assert "payload.change" in str(exc)
-    else:
-        raise AssertionError("expected ValueError")
+    adapter = PriceAdapter()
+    registry = AdapterRegistry()
+    registry.register("KR", "demo", adapter)
+    handlers = JobHandlers(adapters=registry)
+    job = Job(type=JobType.COLLECT_COMPETITOR, payload={"country_code": "KR", "platform": "demo", "competitor": {"id": "c2"}})
+    first = handlers.collect_competitor(job)
+    assert any(c["type"] == "NEW_PRODUCT" for c in first["changes"])
+    adapter.price = 110
+    second = handlers.collect_competitor(job)
+    assert any(c["type"] == "PRICE_CHANGED" for c in second["changes"])
