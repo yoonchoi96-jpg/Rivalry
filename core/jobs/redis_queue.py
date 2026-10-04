@@ -36,6 +36,7 @@ class RedisJobQueue:
         self.reclaim_after_ms = reclaim_after_ms
         self.delayed_key = f"{stream}:delayed"
         self.dead_letter_stream = f"{stream}:dead-letter"
+        self.idempotency_prefix = f"{stream}:idempotency:"
         self._message_ids: dict[str, str] = {}
         self._ensure_group()
 
@@ -46,12 +47,27 @@ class RedisJobQueue:
             if "BUSYGROUP" not in str(exc):
                 raise
 
-    def enqueue(self, job: Job) -> Job:
+    def _enqueue_existing(self, job: Job) -> Job:
         job.status = JobStatus.QUEUED
         job.next_attempt_at = None
-        self.job_store.save(job)
-        self.client.xadd(self.stream, {"job": json.dumps(job.model_dump(mode="json"))})
-        return self.job_store.get(job.id) or job
+        canonical = self.job_store.save(job)
+        self.client.xadd(self.stream, {"job": json.dumps(canonical.model_dump(mode="json"))})
+        return self.job_store.get(canonical.id) or canonical
+
+    def enqueue(self, job: Job) -> Job:
+        if job.idempotency_key:
+            existing = self.job_store.get_by_idempotency_key(job.idempotency_key)
+            if existing is not None:
+                return existing
+            claimed = self.client.set(
+                f"{self.idempotency_prefix}{job.idempotency_key}",
+                job.id,
+                nx=True,
+            )
+            if not claimed:
+                return self.job_store.get_by_idempotency_key(job.idempotency_key) or job
+
+        return self._enqueue_existing(job)
 
     def _decode_entry(self, entry: tuple[str, dict[str, str]]) -> Job:
         message_id, fields = entry
@@ -65,7 +81,7 @@ class RedisJobQueue:
         for raw in due:
             job = Job.model_validate(json.loads(raw))
             self.client.zrem(self.delayed_key, raw)
-            self.enqueue(job)
+            self._enqueue_existing(job)
 
     def dequeue(self) -> Job | None:
         self._promote_due()
@@ -126,14 +142,14 @@ class RedisJobQueue:
                 job.error = None
                 job.finished_at = None
                 job.next_attempt_at = None
-                self.enqueue(job)
+                self._enqueue_existing(job)
                 return job
         return None
 
     def requeue(self, job: Job, *, delay_seconds: float = 0) -> Job:
         self.ack(job)
         if delay_seconds <= 0:
-            return self.enqueue(job)
+            return self._enqueue_existing(job)
         job.status = JobStatus.QUEUED
         self.job_store.save(job)
         self.client.zadd(

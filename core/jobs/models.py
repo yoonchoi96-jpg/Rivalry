@@ -26,6 +26,7 @@ class Job(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: JobType
     payload: dict[str, object] = Field(default_factory=dict)
+    idempotency_key: str | None = None
     status: JobStatus = JobStatus.QUEUED
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     started_at: str | None = None

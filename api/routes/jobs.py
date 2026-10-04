@@ -12,11 +12,18 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 class JobCreateRequest(BaseModel):
     type: JobType
     payload: dict[str, object] = Field(default_factory=dict)
+    idempotency_key: str | None = None
 
 
 @router.post("", response_model=Job, status_code=202)
 def enqueue_job(request: JobCreateRequest) -> Job:
-    return job_queue.enqueue(Job(type=request.type, payload=request.payload))
+    return job_queue.enqueue(
+        Job(
+            type=request.type,
+            payload=request.payload,
+            idempotency_key=request.idempotency_key,
+        )
+    )
 
 
 @router.get("/{job_id}", response_model=Job)

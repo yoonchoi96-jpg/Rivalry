@@ -33,3 +33,29 @@ def test_get_job_returns_404_when_store_has_no_job():
         jobs_route.job_store = original_store
 
     assert response.status_code == 404
+
+
+def test_enqueue_job_accepts_idempotency_key():
+    store = InMemoryJobStore()
+
+    class Queue:
+        def enqueue(self, job):
+            return store.save(job)
+
+    original_queue = jobs_route.job_queue
+    try:
+        jobs_route.job_queue = Queue()
+        client = TestClient(app)
+        payload = {
+            "type": JobType.BUILD_ALERT.value,
+            "payload": {"competitor_id": "c1"},
+            "idempotency_key": "alert-123",
+        }
+        first = client.post("/api/v1/jobs", json=payload)
+        second = client.post("/api/v1/jobs", json=payload)
+    finally:
+        jobs_route.job_queue = original_queue
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json()["id"] == second.json()["id"]
