@@ -149,7 +149,7 @@ class MultiAIOrchestrator:
             quality, latency, samples = self.provider_performance.get(name, (70.0, 1500.0, 0))
             latency_score = 100 if latency <= 500 else 90 if latency <= 1500 else 75 if latency <= 3000 else 50
             cost_score = self.router.COST_SCORE.get(name, 70.0)
-            score = affinity.get(name,70)*0.40 + quality*0.25 + latency_score*0.15 + cost_score*0.10 + (95 if samples == 0 else 70)*0.10
+            score = affinity.get(name,70)*0.35 + quality*0.25 + latency_score*0.15 + cost_score*0.15 + (95 if samples == 0 else 70)*0.10
             scored.append((score,name))
         scored.sort(reverse=True)
         return [name for _,name in scored[: {AIUseCase.CHAT:1, AIUseCase.INTELLIGENCE:3, AIUseCase.EXPERT:3}[request.use_case]]]
