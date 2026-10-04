@@ -198,3 +198,16 @@ def test_adaptive_selection_skips_blocked_name():
         AIRequest(message="최근 시장을 분석해줘", use_case="intelligence")
     )
     assert all(item["provider"] != "openai" or not item["available"] for item in result.evidence)
+
+
+def test_adaptive_routing_prefers_lower_relative_cost_when_quality_is_equal():
+    registry = ProviderRegistry([
+        FakeProvider("openai", "동일한 충분한 분석 결과입니다. " * 8),
+        FakeProvider("deepseek", "동일한 충분한 분석 결과입니다. " * 8),
+    ])
+    orchestrator = MultiAIOrchestrator(registry=registry, synthesizer=FakeSynthesizer())
+    candidates = ["openai", "deepseek"]
+    selected = orchestrator._adaptive_names(
+        AIRequest(message="일반 분석", use_case="chat"), candidates
+    )
+    assert selected == ["deepseek"]
