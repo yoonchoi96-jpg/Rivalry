@@ -5,7 +5,7 @@ from time import perf_counter
 
 from .evidence import AIProviderEvidence
 from .gateway import OpenAIGateway
-from .models import AIRequest, AIResponse
+from .models import AIRequest, AIResponse, AIUseCase
 from .providers import ProviderRegistry, ProviderResult
 from .quality import AIQualityScorer
 from .provider_health import ProviderHealth
@@ -29,7 +29,7 @@ class MultiAIOrchestrator:
         self.quality_scorer = AIQualityScorer()
         self.provider_health = ProviderHealth()
         self.max_retries = 2
-        self.provider_performance = {}
+        self.provider_performance: dict[str, tuple[float, float, int]] = {}
 
     def run(self, request: AIRequest, *, providers: list[str] | None = None) -> AIResponse:
         decision = self.router.select(request) if providers is None else None
@@ -83,7 +83,7 @@ class MultiAIOrchestrator:
                 ).model_dump()
             )
 
-        self._record_performance(results, quality_scores)
+        self._record_performance(results, {item.provider: score for item, score in zip(results, quality_scores)})
         confidence = round(sum(quality_scores) / len(quality_scores), 2) if quality_scores else 0.0
         return final.model_copy(update={
             "model": f"multi-ai->{final.model}",
