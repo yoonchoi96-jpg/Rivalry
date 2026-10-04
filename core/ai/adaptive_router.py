@@ -31,6 +31,7 @@ class ProviderScore:
     latency: float
     cost: float
     exploration: float
+    capability: float
 
 
 class AdaptiveAIRouter:
@@ -78,7 +79,7 @@ class AdaptiveAIRouter:
             if not self.health.allow(name):
                 continue
             profile = self.profiles.get(name, ProviderProfile(name=name))
-            perf = self.performance.get(name, ProviderPerformance(default_latency_ms=profile.default_latency_ms))
+            perf = self.performance.get(name, ProviderPerformance(latency_ms=profile.default_latency_ms))
             latency = self._latency_score(perf.latency_ms)
             capability = self._capability_score(request.message.lower(), profile.capabilities)
             exploration = 95.0 if perf.samples == 0 else 70.0
@@ -87,10 +88,10 @@ class AdaptiveAIRouter:
                 + capability * 0.15
                 + perf.quality * 0.25
                 + latency * 0.15
-                + profile.cost_score * 0.15
-                + exploration * 0.10
+                + profile.cost_score * 0.10
+                + exploration * 0.05
             )
-            result.append(ProviderScore(name, round(score, 2), profile.suitability.get(request.use_case, 70.0), perf.quality, latency, profile.cost_score, exploration))
+            result.append(ProviderScore(name, round(score, 2), profile.suitability.get(request.use_case, 70.0), perf.quality, latency, profile.cost_score, exploration, capability))
         return sorted(result, key=lambda x: (x.score, x.provider), reverse=True)
 
 
