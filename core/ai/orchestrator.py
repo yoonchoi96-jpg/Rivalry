@@ -7,6 +7,7 @@ from .evidence import AIProviderEvidence
 from .gateway import OpenAIGateway
 from .models import AIRequest, AIResponse
 from .providers import ProviderRegistry, ProviderResult
+from .quality import AIQualityScorer
 from .router import AIRouter
 
 
@@ -24,6 +25,7 @@ class MultiAIOrchestrator:
         self.synthesizer = synthesizer or OpenAIGateway()
         self.router = router or AIRouter()
         self.max_workers = max_workers
+        self.quality_scorer = AIQualityScorer()
 
     def run(self, request: AIRequest, *, providers: list[str] | None = None) -> AIResponse:
         decision = self.router.select(request) if providers is None else None
@@ -55,20 +57,29 @@ class MultiAIOrchestrator:
             f"FINDINGS:\n{evidence}"
         )
         final = self.synthesizer.respond(request.model_copy(update={"message": synthesis_prompt}))
-        evidence_items = [
-            AIProviderEvidence(
-                provider=item.provider,
-                model=item.model,
-                available=item.available,
-                text=item.text,
-                latency_ms=item.latency_ms,
-                usage=item.usage or {},
-                error=item.error,
-            ).model_dump()
-            for item in results
-        ]
-        available_count = sum(1 for item in results if item.available and item.text)
-        confidence = min(100.0, 40.0 + available_count * 20.0) if results else 0.0
+        evidence_items = []
+        quality_scores = []
+        for item in results:
+            quality_score, quality_reasons = self.quality_scorer.score(
+                item,
+                observed_intelligence=research_context,
+            )
+            quality_scores.append(quality_score)
+            evidence_items.append(
+                AIProviderEvidence(
+                    provider=item.provider,
+                    model=item.model,
+                    available=item.available,
+                    text=item.text,
+                    latency_ms=item.latency_ms,
+                    usage=item.usage or {},
+                    error=item.error,
+                    quality_score=quality_score,
+                    quality_reasons=quality_reasons,
+                ).model_dump()
+            )
+
+        confidence = round(sum(quality_scores) / len(quality_scores), 2) if quality_scores else 0.0
         return final.model_copy(update={
             "model": f"multi-ai->{final.model}",
             "confidence": confidence,
