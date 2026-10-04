@@ -7,6 +7,7 @@ from engines.change_detection.models import Change
 from engines.intelligence.service import IntelligenceService
 
 from .models import Job, JobType
+from .pipeline import detect_changes, normalize_collection
 
 
 class JobHandlers:
@@ -15,6 +16,7 @@ class JobHandlers:
     def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None) -> None:
         self.intelligence = intelligence or IntelligenceService()
         self.adapters = adapters or AdapterRegistry()
+        self._snapshots: dict[str, dict[str, object]] = {}
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
         country = job.payload.get("country_code")
@@ -30,7 +32,12 @@ class JobHandlers:
         data: dict[str, object] = {"competitor": competitor}
         for name, method in (("products", adapter.get_products), ("prices", adapter.get_prices), ("reviews", adapter.get_reviews), ("promotions", adapter.get_promotions)):
             data[name] = method(competitor)
-        return data
+        normalized = normalize_collection(data)
+        competitor_id = str(competitor.get("id", ""))
+        before = self._snapshots.get(competitor_id, {"prices": [], "products": []})
+        changes = detect_changes(competitor_id, before, normalized, source=str(platform))
+        self._snapshots[competitor_id] = normalized
+        return {**normalized, "changes": [change.model_dump(mode="json") for change in changes]}
 
     def process_intelligence(self, job: Job) -> dict[str, object]:
         raw_change = job.payload.get("change")
@@ -47,7 +54,4 @@ class JobHandlers:
         return report.model_dump(mode="json")
 
     def registry(self) -> dict[JobType, Any]:
-        return {
-            JobType.COLLECT_COMPETITOR: self.collect_competitor,
-            JobType.PROCESS_INTELLIGENCE: self.process_intelligence,
-        }
+        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence}
