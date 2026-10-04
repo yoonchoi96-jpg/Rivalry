@@ -27,9 +27,10 @@ def test_worker_records_handler_failure():
 
     completed = worker.run_once()
 
-    assert completed.status == JobStatus.FAILED
+    assert completed.status == JobStatus.QUEUED
     assert completed.error == "boom"
-    assert completed.finished_at is not None
+    assert completed.finished_at is None
+    assert completed.attempts == 1
 
 
 def test_worker_marks_missing_handler_as_failed():
@@ -40,3 +41,4 @@ def test_worker_marks_missing_handler_as_failed():
 
     assert completed.status == JobStatus.FAILED
     assert "No handler registered" in completed.error
+    assert completed.finished_at is not None
