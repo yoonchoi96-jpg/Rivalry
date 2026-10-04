@@ -92,3 +92,14 @@ class IntelligenceStore:
 
     def predictions_for(self, competitor_id: str) -> list[Prediction]:
         return [p for p in self.predictions if p.competitor_id == competitor_id]
+
+    def research_context(self, business_id: str | None = None, competitor_id: str | None = None) -> dict[str, object]:
+        result: dict[str, object] = {}
+        if business_id:
+            result["market_pulse"] = self.market_pulse(business_id, 7)
+            result["today_changes"] = [c.model_dump() for c in self.today_changes(business_id, 1)]
+        if competitor_id:
+            result["rival_profile"] = self.rival_profile(competitor_id)
+            result["review_trends"] = self.review_trends(competitor_id, 30)
+            result["predictions"] = [p.model_dump() for p in self.predictions_for(competitor_id)]
+        return result
