@@ -110,3 +110,41 @@ def test_redis_queue_deduplicates_idempotency_key():
     second = queue.enqueue(Job(type=JobType.BUILD_ALERT, idempotency_key="alert-123"))
     assert second.id == first.id
     assert len(redis.stream) == 1
+
+
+def test_idempotent_job_immediate_requeue_is_enqueued_again():
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = queue.enqueue(Job(type=JobType.BUILD_ALERT, idempotency_key="retry-123"))
+    dequeued = queue.dequeue()
+    queue.requeue(dequeued)
+    assert len(redis.stream) == 1
+    assert queue.dequeue().id == job.id
+
+
+def test_idempotent_delayed_requeue_is_promoted(monkeypatch):
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = queue.enqueue(Job(type=JobType.BUILD_ALERT, idempotency_key="delay-123"))
+    dequeued = queue.dequeue()
+    monkeypatch.setattr("core.jobs.redis_queue.time.time", lambda: 100.0)
+    queue.requeue(dequeued, delay_seconds=10)
+    monkeypatch.setattr("core.jobs.redis_queue.time.time", lambda: 111.0)
+    promoted = queue.dequeue()
+    assert promoted is not None
+    assert promoted.id == job.id
+
+
+def test_idempotent_dlq_replay_is_enqueued():
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = queue.enqueue(Job(type=JobType.BUILD_ALERT, idempotency_key="dlq-123"))
+    dequeued = queue.dequeue()
+    queue.dead_letter(dequeued, "boom")
+    assert not redis.stream
+    replayed = queue.replay_dead_letter(job.id)
+    assert replayed is not None
+    assert queue.dequeue().id == job.id
