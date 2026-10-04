@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import perf_counter
 
+from .adaptive_router import AdaptiveAIRouter
 from .evidence import AIProviderEvidence
 from .gateway import OpenAIGateway
 from .models import AIRequest, AIResponse, AIUseCase
@@ -29,7 +30,7 @@ class MultiAIOrchestrator:
         self.quality_scorer = AIQualityScorer()
         self.provider_health = ProviderHealth()
         self.max_retries = 2
-        self.provider_performance: dict[str, tuple[float, float, int]] = {}
+        self.adaptive_router = AdaptiveAIRouter(self.provider_health)
 
     def run(self, request: AIRequest, *, providers: list[str] | None = None) -> AIResponse:
         decision = self.router.select(request) if providers is None else None
@@ -83,7 +84,8 @@ class MultiAIOrchestrator:
                 ).model_dump()
             )
 
-        self._record_performance(results, {item.provider: score for item, score in zip(results, quality_scores)})
+        for item, score in zip(results, quality_scores):
+            self.adaptive_router.record(item.provider, score, item.latency_ms)
         confidence = round(sum(quality_scores) / len(quality_scores), 2) if quality_scores else 0.0
         return final.model_copy(update={
             "model": f"multi-ai->{final.model}",
@@ -142,27 +144,7 @@ class MultiAIOrchestrator:
             return [future.result() for future in as_completed(futures)]
 
     def _adaptive_names(self, request: AIRequest, candidates: list[str]) -> list[str]:
-        candidates = [name for name in dict.fromkeys(candidates) if self.provider_health.allow(name)]
-        affinity = {"openai":100,"perplexity":98,"claude":96,"gemini":94,"deepseek":90,"naver":88,"qwen":88,"grok":86}
-        scored = []
-        for name in candidates:
-            quality, latency, samples = self.provider_performance.get(name, (70.0, 1500.0, 0))
-            latency_score = 100 if latency <= 500 else 90 if latency <= 1500 else 75 if latency <= 3000 else 50
-            cost_score = self.router.COST_SCORE.get(name, 70.0)
-            score = affinity.get(name,70)*0.35 + quality*0.25 + latency_score*0.15 + cost_score*0.15 + (95 if samples == 0 else 70)*0.10
-            scored.append((score,name))
-        scored.sort(reverse=True)
-        return [name for _,name in scored[: {AIUseCase.CHAT:1, AIUseCase.INTELLIGENCE:3, AIUseCase.EXPERT:3}[request.use_case]]]
-
-    def _record_performance(self, results: list[ProviderResult], qualities: dict[str,float]) -> None:
-        for result in results:
-            if not result.available:
-                continue
-            old_quality, old_latency, samples = self.provider_performance.get(result.provider,(70.0,1500.0,0))
-            alpha = 1.0 if samples == 0 else 0.35
-            quality = (1-alpha)*old_quality + alpha*qualities.get(result.provider,0.0)
-            latency = old_latency if result.latency_ms is None else (1-alpha)*old_latency + alpha*result.latency_ms
-            self.provider_performance[result.provider]=(round(quality,2),round(latency,2),samples+1)
+        return self.adaptive_router.select(request, candidates)
 
     @staticmethod
     def _system() -> str:
