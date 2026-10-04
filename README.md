@@ -27,3 +27,15 @@ Limits advertised as unlimited still require internal usage/abuse controls.
 ## Repository
 
 The repository is intentionally organized so the App Factory can reuse authentication, billing, entitlements, usage, AI, audit, adapters, intelligence engines, and testing patterns in future products.
+
+## Getting started
+
+```bash
+pip install -e ".[test]"
+cp .env.example .env
+uvicorn api.main:app --reload      # API
+rivalry-worker                     # job worker (needs RIVALRY_DATABASE_URL / RIVALRY_REDIS_URL)
+pytest -q
+```
+
+See [docs/AUDIT.md](docs/AUDIT.md), [ARCHITECTURE.md](ARCHITECTURE.md) and [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -4,3 +4,15 @@ __pycache__/
 .env
 *.db
 .DS_Store
+.env.*
+!.env.example
+*.pem
+*.key
+*.sqlite3
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

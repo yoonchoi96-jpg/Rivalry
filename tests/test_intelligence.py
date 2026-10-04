@@ -29,7 +29,7 @@ from core.intelligence.prediction import PredictionEngine
 
 
 def test_alert_engine_prioritizes_impact():
-    changes = [low, high] if False else [
+    changes = [
         Change(id="low", competitor_id="c", type="PRICE_CHANGED", detected_at="2026-10-04", impact_score=10, confidence=90),
         Change(id="high", competitor_id="c", type="NEW_PRODUCT", detected_at="2026-10-04", impact_score=90, confidence=80),
     ]

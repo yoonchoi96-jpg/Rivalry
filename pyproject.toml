@@ -10,3 +10,7 @@ test=["pytest>=8,<9"]
 
 [tool.setuptools.packages.find]
 include=["api*", "apps*", "core*", "engines*", "adapters*", "db*"]
+
+[tool.pytest.ini_options]
+testpaths=["tests"]
+markers=["integration: requires external services (e.g. PostgreSQL via RIVALRY_TEST_DATABASE_URL)"]

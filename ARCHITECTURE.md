@@ -18,4 +18,4 @@ MVP implements the deterministic foundation for future Memory, Pattern and Predi
 
 ## Principles
 
-Deterministic code collects, normalizes, compares, and scores; AI interprets and never overwrites raw data. Snapshots are immutable, jobs are idempotent, and failed jobs are never silently dropped. Rivalry recommends but does not act autonomously. See [AUDIT.md](AUDIT.md) for the current state and roadmap.
+Deterministic code collects, normalizes, compares, and scores; AI interprets and never overwrites raw data. Snapshots are immutable, jobs are idempotent, and failed jobs are never silently dropped. Rivalry recommends but does not act autonomously. See [docs/AUDIT.md](docs/AUDIT.md) for the current state and roadmap.
