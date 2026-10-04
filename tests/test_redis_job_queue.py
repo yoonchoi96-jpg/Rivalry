@@ -213,7 +213,9 @@ class CrashRecoveryFakeRedis(FakeRedis):
 
 def test_xautoclaim_reclaims_pending_message_after_consumer_crash():    store = InMemoryJobStore()
     redis = CrashRecoveryFakeRedis()
-    first = RedisJobQueue("redis://unused", job_store=store, client=redis, consumer="worker-a", reclaim_after_ms=1)
+    first = RedisJobQueue(
+        "redis://unused", job_store=store, client=redis, consumer="worker-a", reclaim_after_ms=1
+    )
     job = first.enqueue(Job(type=JobType.BUILD_ALERT))
     dequeued = first.dequeue()
     assert dequeued is not None
