@@ -1,4 +1,5 @@
 import json
+import time
 
 from core.jobs.models import Job, JobType
 from core.jobs.redis_queue import RedisJobQueue
@@ -14,6 +15,7 @@ class FakeRedis:
         self.delayed = {}
         self.keys = {}
         self.pending = {}
+        self.pending_at = {}
 
     def xgroup_create(self, stream, group, id="0", mkstream=False):
         key = (stream, group)
@@ -54,17 +56,22 @@ class FakeRedis:
             return []
         message = self.stream.pop(0)
         self.pending[message[0]] = message
+        self.pending_at[message[0]] = time.monotonic()
         return [(list(streams)[0], [message])]
 
     def xautoclaim(self, stream, group, consumer, min_idle_time, start_id="0-0", count=1):
         if not self.pending:
             return ("0-0", [])
-        message_id, entry = next(iter(self.pending.items()))
-        return ("0-0", [entry])
+        for message_id, entry in self.pending.items():
+            idle_ms = (time.monotonic() - self.pending_at[message_id]) * 1000
+            if idle_ms >= min_idle_time:
+                return ("0-0", [entry])
+        return ("0-0", [])
 
     def xack(self, stream, group, message_id):
         self.acked.append((stream, group, message_id))
         self.pending.pop(message_id, None)
+        self.pending_at.pop(message_id, None)
 
     def eval(self, script, numkeys, marker, stream, raw):
         if marker in self.keys:
@@ -202,13 +209,13 @@ def test_xautoclaim_reclaims_pending_message_after_consumer_crash():
     store = InMemoryJobStore()
     redis = FakeRedis()
     first = RedisJobQueue(
-        "redis://unused", job_store=store, client=redis, consumer="worker-a", reclaim_after_ms=1
+        "redis://unused", job_store=store, client=redis, consumer="worker-a", reclaim_after_ms=0
     )
     job = first.enqueue(Job(type=JobType.BUILD_ALERT))
     dequeued = first.dequeue()
     assert dequeued is not None
     second = RedisJobQueue(
-        "redis://unused", job_store=store, client=redis, consumer="worker-b", reclaim_after_ms=1
+        "redis://unused", job_store=store, client=redis, consumer="worker-b", reclaim_after_ms=0
     )
     reclaimed = second.dequeue()
     assert reclaimed is not None
