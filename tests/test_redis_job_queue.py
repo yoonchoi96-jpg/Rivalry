@@ -13,6 +13,7 @@ class FakeRedis:
         self.acked = []
         self.delayed = {}
         self.keys = {}
+        self.pending = {}
 
     def xgroup_create(self, stream, group, id="0", mkstream=False):
         key = (stream, group)
@@ -51,10 +52,19 @@ class FakeRedis:
     def xreadgroup(self, group, consumer, streams, count=1, block=1000):
         if not self.stream:
             return []
-        return [(list(streams)[0], [self.stream.pop(0)])]
+        message = self.stream.pop(0)
+        self.pending[message[0]] = message
+        return [(list(streams)[0], [message])]
+
+    def xautoclaim(self, stream, group, consumer, min_idle_time, start_id="0-0", count=1):
+        if not self.pending:
+            return ("0-0", [])
+        message_id, entry = next(iter(self.pending.items()))
+        return ("0-0", [entry])
 
     def xack(self, stream, group, message_id):
         self.acked.append((stream, group, message_id))
+        self.pending.pop(message_id, None)
 
     def eval(self, script, numkeys, marker, stream, raw):
         if marker in self.keys:
@@ -188,32 +198,9 @@ def test_outbox_reconciliation_publishes_pending_job_once():
 
 
 
-class CrashRecoveryFakeRedis(FakeRedis):
-    def __init__(self):
-        super().__init__()
-        self.pending = {}
-
-    def xreadgroup(self, group, consumer, streams, count=1, block=1000):
-        if not self.stream:
-            return []
-        message = self.stream.pop(0)
-        self.pending[message[0]] = message
-        return [(list(streams)[0], [message])]
-
-    def xautoclaim(self, stream, group, consumer, min_idle_time, start_id="0-0", count=1):
-        if not self.pending:
-            return ("0-0", [])
-        message_id, entry = next(iter(self.pending.items()))
-        return ("0-0", [entry])
-
-    def xack(self, stream, group, message_id):
-        self.acked.append((stream, group, message_id))
-        self.pending.pop(message_id, None)
-
-
 def test_xautoclaim_reclaims_pending_message_after_consumer_crash():
     store = InMemoryJobStore()
-    redis = CrashRecoveryFakeRedis()
+    redis = FakeRedis()
     first = RedisJobQueue(
         "redis://unused", job_store=store, client=redis, consumer="worker-a", reclaim_after_ms=1
     )
@@ -226,3 +213,5 @@ def test_xautoclaim_reclaims_pending_message_after_consumer_crash():
     reclaimed = second.dequeue()
     assert reclaimed is not None
     assert reclaimed.id == job.id
+    second.ack(reclaimed)
+    assert not redis.pending
