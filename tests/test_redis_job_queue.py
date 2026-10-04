@@ -64,6 +64,7 @@ class FakeRedis:
 
     def xack(self, stream, group, message_id):
         self.acked.append((stream, group, message_id))
+        self.pending.pop(message_id, None)
 
     def eval(self, script, numkeys, marker, stream, raw):
         if marker in self.keys:
