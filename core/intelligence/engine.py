@@ -26,13 +26,13 @@ class IntelligenceStore:
     alerts: list[dict[str, object]] = field(default_factory=list)
 
     def record_changes(self, changes: list[Change]) -> None:
-        self.changes.extend(changes)
+        self.changes.extend(Change.model_validate(item.model_dump(mode="json")) for item in changes)
 
     def record_reviews(self, reviews: list[Review]) -> None:
-        self.reviews.extend(reviews)
+        self.reviews.extend(Review.model_validate(item.model_dump(mode="json")) for item in reviews)
 
     def record_prediction(self, prediction: Prediction) -> None:
-        self.predictions.append(prediction)
+        self.predictions.append(Prediction.model_validate(prediction.model_dump(mode="json")))
 
     def record_alert(self, alert: dict[str, object]) -> None:
         self.alerts.append(dict(alert))
