@@ -151,7 +151,6 @@ class MultiAIOrchestrator:
             score = affinity.get(name,70)*0.45 + quality*0.30 + latency_score*0.15 + (95 if samples == 0 else 70)*0.10
             scored.append((score,name))
         scored.sort(reverse=True)
-        limit = {request.use_case: None}
         return [name for _,name in scored[: {AIUseCase.CHAT:1, AIUseCase.INTELLIGENCE:3, AIUseCase.EXPERT:3}[request.use_case]]]
 
     def _record_performance(self, results: list[ProviderResult], qualities: dict[str,float]) -> None:
