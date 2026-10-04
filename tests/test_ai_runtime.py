@@ -42,6 +42,15 @@ class FakeGateway:
     def _instructions(use_case):
         return "test"
 
+    @staticmethod
+    def _response_from(response, model):
+        from core.ai.models import AIResponse
+        return AIResponse(text=response.output_text, model=model, response_id=response.id, usage={
+            "input_tokens": getattr(response.usage, "input_tokens", 0),
+            "output_tokens": getattr(response.usage, "output_tokens", 0),
+            "total_tokens": getattr(response.usage, "total_tokens", 0),
+        } if response.usage else {})
+
 
 def test_runtime_executes_function_call_and_continues():
     client = FakeClient()
