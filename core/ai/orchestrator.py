@@ -31,7 +31,12 @@ class MultiAIOrchestrator:
         if not names:
             return AIResponse(text="선택된 AI provider가 없습니다.", model="multi-ai", usage={})
 
-        prompt = self._research_prompt(request, decision.reason if decision else "explicit")
+        research_context = request.context.get("rivalry_intelligence", {})
+        prompt = self._research_prompt(
+            request,
+            decision.reason if decision else "explicit",
+            research_context,
+        )
         results = self._fan_out(names, prompt)
         evidence = "\n\n".join(
             f"[{item.provider} / {item.model}]\n{item.text}"
@@ -92,12 +97,19 @@ class MultiAIOrchestrator:
         )
 
     @staticmethod
-    def _research_prompt(request: AIRequest, routing_reason: str) -> str:
+    def _research_prompt(
+        request: AIRequest,
+        routing_reason: str,
+        intelligence: object,
+    ) -> str:
         return (
             f"Business ID: {request.business_id or 'unknown'}\n"
             f"Context: {request.context}\n"
             f"Routing reason: {routing_reason}\n"
+            f"Rivalry observed intelligence: {intelligence}\n"
             f"User request: {request.message}\n"
+            "Treat Rivalry observed intelligence as primary first-party evidence. "
+            "Clearly distinguish observed facts from external research and hypotheses. "
             "Investigate this request independently and provide concise findings "
             "that another model can cross-check."
         )
