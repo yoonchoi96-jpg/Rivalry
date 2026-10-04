@@ -113,3 +113,23 @@ def test_worker_outputs_are_visible_in_intelligence_store():
         ],
     }))
     assert store.predictions_for("c1")[0].id == prediction["prediction"]["id"]
+
+
+def test_collection_snapshot_is_kept_in_intelligence_store():
+    class PriceAdapter(FakeAdapter):
+        def __init__(self): self.price = 100
+        def get_prices(self, competitor): return [self.price]
+
+    adapter = PriceAdapter()
+    registry = AdapterRegistry()
+    registry.register("KR", "demo", adapter)
+    store = IntelligenceStore()
+    handlers = JobHandlers(adapters=registry, store=store)
+    job = Job(type=JobType.COLLECT_COMPETITOR, payload={"country_code": "KR", "platform": "demo", "competitor": {"id": "c-snapshot"}})
+
+    handlers.collect_competitor(job)
+    assert store.latest_snapshot("c-snapshot")["prices"] == [100]
+
+    adapter.price = 110
+    result = handlers.collect_competitor(job)
+    assert any(change["type"] == "PRICE_CHANGED" for change in result["changes"])
