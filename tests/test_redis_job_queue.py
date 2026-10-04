@@ -54,6 +54,8 @@ class FakeRedis:
         self.acked.append((stream, group, message_id))
 
     def xlen(self, stream):
+        if stream.endswith(":dead-letter"):
+            return len(self.dead)
         return len(self.stream)
 
 
