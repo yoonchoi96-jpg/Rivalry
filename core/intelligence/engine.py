@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .models import Change, CostSignal, Prediction, Review
@@ -16,11 +15,33 @@ def _parse_time(value: str) -> datetime | None:
         return None
 
 
-@dataclass
 class IntelligenceStore:
     """Application-facing intelligence facade backed by an injectable repository."""
 
-    repository: IntelligenceRepository = field(default_factory=InMemoryIntelligenceRepository)
+    def __init__(
+        self,
+        repository: IntelligenceRepository | None = None,
+        *,
+        changes: list[Change] | None = None,
+        reviews: list[Review] | None = None,
+        predictions: list[Prediction] | None = None,
+        cost_signal_items: list[CostSignal] | None = None,
+        alerts: list[dict[str, object]] | None = None,
+    ) -> None:
+        repo = repository or InMemoryIntelligenceRepository()
+        self.repository = repo
+        if changes:
+            repo.record_changes(changes)
+        if reviews:
+            repo.record_reviews(reviews)
+        if predictions:
+            for prediction in predictions:
+                repo.record_prediction(prediction)
+        if cost_signal_items:
+            repo.cost_signal_items.extend(cost_signal_items)
+        if alerts:
+            for alert in alerts:
+                repo.record_alert(alert)
 
     @property
     def changes(self) -> list[Change]:
