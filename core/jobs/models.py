@@ -17,6 +17,7 @@ class JobStatus(StrEnum):
 class JobType(StrEnum):
     COLLECT_COMPETITOR = "collect_competitor"
     PROCESS_INTELLIGENCE = "process_intelligence"
+    BUILD_ALERT = "build_alert"
 
 
 class Job(BaseModel):

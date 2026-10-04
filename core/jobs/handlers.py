@@ -56,5 +56,30 @@ class JobHandlers:
         recommendation = self.recommendations.recommend(change)
         return {**report.model_dump(mode="json"), "recommendation": recommendation}
 
+    def build_alert(self, job: Job) -> dict[str, object]:
+        change = job.payload.get("change")
+        intelligence = job.payload.get("intelligence")
+        if not isinstance(change, dict) or not isinstance(intelligence, dict):
+            raise ValueError("build_alert requires payload.change and payload.intelligence")
+        recommendation = intelligence.get("recommendation")
+        hypotheses = intelligence.get("hypotheses", [])
+        top_cause = "unknown"
+        if isinstance(hypotheses, list) and hypotheses and isinstance(hypotheses[0], dict):
+            top_cause = str(hypotheses[0].get("type", "unknown"))
+        return {
+            "change_id": str(change.get("id", "")),
+            "competitor_id": str(change.get("competitor_id", "")),
+            "type": str(change.get("type", "UNKNOWN")),
+            "impact_score": float(change.get("impact_score", 0)),
+            "confidence": float(intelligence.get("confidence", 0)),
+            "summary": str(intelligence.get("summary", "Material competitor change detected.")),
+            "likely_cause": top_cause,
+            "recommended_action": recommendation.get("action", "monitor") if isinstance(recommendation, dict) else "monitor",
+        }
+
     def registry(self) -> dict[JobType, Any]:
-        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence}
+        return {
+            JobType.COLLECT_COMPETITOR: self.collect_competitor,
+            JobType.PROCESS_INTELLIGENCE: self.process_intelligence,
+            JobType.BUILD_ALERT: self.build_alert,
+        }
