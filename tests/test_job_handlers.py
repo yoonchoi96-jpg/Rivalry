@@ -133,3 +133,28 @@ def test_collection_snapshot_is_kept_in_intelligence_store():
     adapter.price = 110
     result = handlers.collect_competitor(job)
     assert any(change["type"] == "PRICE_CHANGED" for change in result["changes"])
+
+
+def test_two_stores_share_repository_state():
+    from core.intelligence.repository import InMemoryIntelligenceRepository
+
+    repository = InMemoryIntelligenceRepository()
+    first = IntelligenceStore(repository=repository)
+    second = IntelligenceStore(repository=repository)
+
+    first.record_snapshot("c-shared", {"prices": [100], "products": []})
+    assert second.latest_snapshot("c-shared")["prices"] == [100]
+
+    from core.intelligence.models import Change
+    change = Change(
+        id="shared-change",
+        business_id=None,
+        competitor_id="c-shared",
+        type="PRICE_CHANGED",
+        before=100,
+        after=110,
+        magnitude=10,
+        detected_at="2026-10-04T00:00:00Z",
+    )
+    first.record_changes([change])
+    assert [item.id for item in second.competitor_history("c-shared")] == ["shared-change"]

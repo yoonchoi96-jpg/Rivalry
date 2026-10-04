@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .models import Change, CostSignal, Prediction, Review
+from .repository import InMemoryIntelligenceRepository, IntelligenceRepository
 from .services import AlertIntelligenceService, ReviewIntelligenceService
 
 
@@ -15,28 +15,65 @@ def _parse_time(value: str) -> datetime | None:
         return None
 
 
-@dataclass
 class IntelligenceStore:
-    """Application-facing in-memory store; replace with repository persistence later."""
+    """Application-facing intelligence facade backed by an injectable repository."""
 
-    changes: list[Change] = field(default_factory=list)
-    reviews: list[Review] = field(default_factory=list)
-    predictions: list[Prediction] = field(default_factory=list)
-    cost_signal_items: list[CostSignal] = field(default_factory=list)
-    alerts: list[dict[str, object]] = field(default_factory=list)
-    snapshots: dict[str, dict[str, object]] = field(default_factory=dict)
+    def __init__(
+        self,
+        repository: IntelligenceRepository | None = None,
+        *,
+        changes: list[Change] | None = None,
+        reviews: list[Review] | None = None,
+        predictions: list[Prediction] | None = None,
+        cost_signal_items: list[CostSignal] | None = None,
+        alerts: list[dict[str, object]] | None = None,
+    ) -> None:
+        repo = repository or InMemoryIntelligenceRepository()
+        self.repository = repo
+        if changes:
+            repo.record_changes(changes)
+        if reviews:
+            repo.record_reviews(reviews)
+        if predictions:
+            for prediction in predictions:
+                repo.record_prediction(prediction)
+        if cost_signal_items:
+            repo.cost_signal_items.extend(cost_signal_items)
+        if alerts:
+            for alert in alerts:
+                repo.record_alert(alert)
+
+    @property
+    def changes(self) -> list[Change]:
+        return self.repository.all_changes()
+
+    @property
+    def reviews(self) -> list[Review]:
+        return self.repository.all_reviews()
+
+    @property
+    def predictions(self) -> list[Prediction]:
+        return self.repository.all_predictions()
+
+    @property
+    def cost_signal_items(self) -> list[CostSignal]:
+        return self.repository.all_cost_signals()
+
+    @property
+    def alerts(self) -> list[dict[str, object]]:
+        return self.repository.all_alerts()
 
     def record_changes(self, changes: list[Change]) -> None:
-        self.changes.extend(Change.model_validate(item.model_dump(mode="json")) for item in changes)
+        self.repository.record_changes(changes)
 
     def record_reviews(self, reviews: list[Review]) -> None:
-        self.reviews.extend(Review.model_validate(item.model_dump(mode="json")) for item in reviews)
+        self.repository.record_reviews(reviews)
 
     def record_prediction(self, prediction: Prediction) -> None:
-        self.predictions.append(Prediction.model_validate(prediction.model_dump(mode="json")))
+        self.repository.record_prediction(prediction)
 
     def record_alert(self, alert: dict[str, object]) -> None:
-        self.alerts.append(dict(alert))
+        self.repository.record_alert(alert)
 
     def _recent(self, values, field_name: str, days: int):
         if days <= 0:
@@ -57,10 +94,10 @@ class IntelligenceStore:
         return AlertIntelligenceService.prioritize(values, 10)
 
     def latest_snapshot(self, competitor_id: str) -> dict[str, object]:
-        return self.snapshots.get(competitor_id, {})
+        return self.repository.latest_snapshot(competitor_id)
 
     def record_snapshot(self, competitor_id: str, snapshot: dict[str, object]) -> None:
-        self.snapshots[competitor_id] = dict(snapshot)
+        self.repository.record_snapshot(competitor_id, snapshot)
 
     def competitor_history(self, competitor_id: str, days: int = 30) -> list[Change]:
         values = [
