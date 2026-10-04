@@ -77,3 +77,19 @@ def test_dead_letter_acknowledges_message():
     queue.dead_letter(dequeued, "boom")
     assert len(redis.dead) == 1
     assert redis.acked
+
+
+def test_delayed_requeue_and_dlq_replay(monkeypatch):
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = Job(type=JobType.BUILD_ALERT)
+    queue.enqueue(job)
+    dequeued = queue.dequeue()
+    queue.requeue(dequeued, delay_seconds=10)
+    assert queue.dequeue() is None
+
+    queue.dead_letter(dequeued, "boom")
+    replayed = queue.replay_dead_letter(job.id)
+    assert replayed is not None
+    assert replayed.status.value == "queued"
