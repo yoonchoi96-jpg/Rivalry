@@ -66,3 +66,29 @@ def test_build_alert_returns_actionable_alert():
     result = handlers.build_alert(Job(type=JobType.BUILD_ALERT, payload={"change": change, "intelligence": intelligence}))
     assert result["likely_cause"] == "cost"
     assert result["recommended_action"] == "monitor_before_matching_price"
+
+
+def test_analyze_reviews_returns_summary():
+    handlers = JobHandlers()
+    result = handlers.analyze_reviews(Job(type=JobType.ANALYZE_REVIEWS, payload={
+        "reviews": [
+            {"id": "r1", "competitor_id": "c1", "rating": 5, "created_at": "2026-10-04T00:00:00Z", "sentiment": "positive", "topics": ["taste"]},
+            {"id": "r2", "competitor_id": "c1", "rating": 2, "created_at": "2026-10-04T00:00:00Z", "sentiment": "negative", "topics": ["delivery"]},
+        ],
+    }))
+    assert result["review_count"] == 2
+    assert result["positive_count"] == 1
+    assert result["negative_count"] == 1
+
+
+def test_generate_prediction_requires_repeated_signal():
+    handlers = JobHandlers()
+    result = handlers.generate_prediction(Job(type=JobType.GENERATE_PREDICTION, payload={
+        "competitor_id": "c1",
+        "changes": [
+            {"id": "a", "competitor_id": "c1", "type": "PRICE_CHANGED", "magnitude": 5, "detected_at": "2026-10-04T00:00:00Z"},
+            {"id": "b", "competitor_id": "c1", "type": "PRICE_CHANGED", "magnitude": 6, "detected_at": "2026-10-04T00:00:00Z"},
+        ],
+    }))
+    assert result["prediction"]["competitor_id"] == "c1"
+    assert result["prediction"]["evidence_change_ids"] == ["a", "b"]

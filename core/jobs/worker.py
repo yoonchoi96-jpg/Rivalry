@@ -10,7 +10,7 @@ JobHandler = Callable[[Job], dict[str, object] | None]
 
 
 class JobWorker:
-    """Dispatch queued jobs and optionally enqueue deterministic follow-up jobs."""
+    """Dispatch queued jobs and enqueue deterministic follow-ups."""
 
     def __init__(self, queue: InMemoryJobQueue, handlers: dict[JobType, JobHandler] | None = None) -> None:
         self.queue = queue
@@ -23,11 +23,28 @@ class JobWorker:
             changes = job.result.get("changes", [])
             if not isinstance(changes, list):
                 return []
-            return [Job(type=JobType.PROCESS_INTELLIGENCE, payload={"change": change}) for change in changes if isinstance(change, dict)]
+            jobs = [
+                Job(type=JobType.PROCESS_INTELLIGENCE, payload={"change": change})
+                for change in changes
+                if isinstance(change, dict)
+            ]
+            reviews = job.result.get("reviews", [])
+            competitor = job.result.get("competitor", {})
+            if isinstance(reviews, list) and reviews and isinstance(competitor, dict):
+                jobs.append(Job(type=JobType.ANALYZE_REVIEWS, payload={"reviews": reviews, "days": 3}))
+            if changes and isinstance(competitor, dict) and competitor.get("id"):
+                jobs.append(Job(
+                    type=JobType.GENERATE_PREDICTION,
+                    payload={"competitor_id": competitor["id"], "changes": changes},
+                ))
+            return jobs
         if job.type == JobType.PROCESS_INTELLIGENCE:
             change = job.payload.get("change")
             if isinstance(change, dict):
-                return [Job(type=JobType.BUILD_ALERT, payload={"change": change, "intelligence": job.result})]
+                return [Job(
+                    type=JobType.BUILD_ALERT,
+                    payload={"change": change, "intelligence": job.result},
+                )]
         return []
 
     def run_once(self) -> Job | None:
