@@ -55,6 +55,8 @@ def test_multi_ai_fans_out_and_synthesizes():
     assert result.model == "multi-ai->gpt-test"
     assert 0 <= result.confidence <= 100
     assert {item["provider"] for item in result.evidence} == {"openai", "gemini", "perplexity"}
+    assert result.routing["selected"] == ["openai", "gemini", "perplexity"]
+    assert result.routing["scores"]
 
 
 def test_multi_ai_research_prompt_preserves_observed_intelligence():
@@ -236,3 +238,12 @@ def test_adaptive_routing_uses_korean_specialist_signal():
         ["openai", "naver"],
     )
     assert selected == ["naver"]
+
+
+def test_routing_metadata_exposes_reason_and_scores():
+    orchestrator = MultiAIOrchestrator(registry=ProviderRegistry([FakeProvider("openai", "일반 분석"), FakeProvider("perplexity", "최신 시장 뉴스")]), synthesizer=FakeSynthesizer())
+    result = orchestrator.run(AIRequest(message="오늘 최신 시장 뉴스를 확인해줘"))
+    assert result.routing["reason"] == "chat, latest/web"
+    assert result.routing["selected"] == ["perplexity"]
+    assert result.routing["scores"][0]["provider"] == "perplexity"
+    assert "capability" in result.routing["scores"][0]
