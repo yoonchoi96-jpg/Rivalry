@@ -5,18 +5,14 @@ from collections.abc import Callable
 from typing import Any
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from .models import Change, CostSignal, Prediction, Review
 from .repository import IntelligenceRepository
 
 
 class PostgresIntelligenceRepository(IntelligenceRepository):
-    """PostgreSQL-backed implementation shared safely by API/worker processes.
-
-    A connection is opened per repository operation. This keeps the repository
-    safe when one application process serves concurrent requests; connection
-    pooling can be introduced later without changing the repository contract.
-    """
+    """PostgreSQL-backed repository shared safely by API/worker processes."""
 
     def __init__(
         self,
@@ -45,8 +41,8 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                 )
                 VALUES (
                     %(id)s, %(business_id)s, %(competitor_id)s, %(type)s,
-                    %(before_json)s, %(after_json)s, %(detected_at)s, %(magnitude)s,
-                    %(severity)s, %(impact_score)s, %(confidence)s,
+                    %(before_json)s, %(after_json)s, %(detected_at)s::timestamptz,
+                    %(magnitude)s, %(severity)s, %(impact_score)s, %(confidence)s,
                     %(evidence_json)s, %(source)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -74,11 +70,12 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                 """
                 INSERT INTO reviews (
                     id, competitor_id, rating, text, created_at,
-                    sentiment, topics_json, source, confidence
+                    sentiment, topics_json, product_id, source, confidence
                 )
                 VALUES (
-                    %(id)s, %(competitor_id)s, %(rating)s, %(text)s, %(created_at)s,
-                    %(sentiment)s, %(topics_json)s, %(source)s, %(confidence)s
+                    %(id)s, %(competitor_id)s, %(rating)s, %(text)s,
+                    %(created_at)s::timestamptz, %(sentiment)s, %(topics_json)s,
+                    %(product_id)s, %(source)s, %(confidence)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     competitor_id = EXCLUDED.competitor_id,
@@ -87,6 +84,7 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                     created_at = EXCLUDED.created_at,
                     sentiment = EXCLUDED.sentiment,
                     topics_json = EXCLUDED.topics_json,
+                    product_id = EXCLUDED.product_id,
                     source = EXCLUDED.source,
                     confidence = EXCLUDED.confidence
                 """,
@@ -102,9 +100,12 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                     id, competitor_id, prediction_type, predicted_at,
                     expected_window_days, probability, evidence_json, outcome, outcome_at
                 )
-                VALUES (%(id)s, %(competitor_id)s, %(prediction_type)s, %(predicted_at)s,
-                        %(expected_window_days)s, %(probability)s, %(evidence_json)s,
-                        %(outcome)s, %(outcome_at)s)
+                VALUES (
+                    %(id)s, %(competitor_id)s, %(prediction_type)s,
+                    %(predicted_at)s::timestamptz, %(expected_window_days)s,
+                    %(probability)s, %(evidence_json)s, %(outcome)s,
+                    %(outcome_at)s::timestamptz
+                )
                 ON CONFLICT (id) DO UPDATE SET
                     competitor_id = EXCLUDED.competitor_id,
                     prediction_type = EXCLUDED.prediction_type,
@@ -117,7 +118,7 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                 """,
                 {
                     **row,
-                    "evidence_json": json.dumps(row["evidence_change_ids"]),
+                    "evidence_json": Jsonb(row["evidence_change_ids"]),
                 },
             )
 
@@ -139,7 +140,7 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                     alert_id,
                     str(alert.get("competitor_id", "")),
                     str(alert.get("change_id", "")),
-                    json.dumps(alert),
+                    Jsonb(alert),
                 ),
             )
 
@@ -150,7 +151,7 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                 INSERT INTO snapshots (id, competitor_id, captured_at, payload_json, source)
                 VALUES (gen_random_uuid()::text, %s, NOW(), %s, %s)
                 """,
-                (competitor_id, json.dumps(snapshot), "rivalry"),
+                (competitor_id, Jsonb(snapshot), "rivalry"),
             )
 
     def latest_snapshot(self, competitor_id: str) -> dict[str, object]:
@@ -166,9 +167,36 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                 (competitor_id,),
             )
             row = cur.fetchone()
-        if not row:
-            return {}
-        return self._json_object(row[0])
+        return self._json_object(row[0]) if row else {}
+
+    def record_cost_signals(self, signals: list[CostSignal]) -> None:
+        if not signals:
+            return
+        with self._connection() as conn, conn.cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO cost_signals (
+                    id, product_id, type, name, before_value, after_value,
+                    unit, observed_at, source, confidence
+                )
+                VALUES (
+                    %(id)s, %(product_id)s, %(type)s, %(name)s, %(before)s,
+                    %(after)s, %(unit)s, %(observed_at)s::timestamptz,
+                    %(source)s, %(confidence)s
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    product_id = EXCLUDED.product_id,
+                    type = EXCLUDED.type,
+                    name = EXCLUDED.name,
+                    before_value = EXCLUDED.before_value,
+                    after_value = EXCLUDED.after_value,
+                    unit = EXCLUDED.unit,
+                    observed_at = EXCLUDED.observed_at,
+                    source = EXCLUDED.source,
+                    confidence = EXCLUDED.confidence
+                """,
+                [signal.model_dump(mode="json") for signal in signals],
+            )
 
     def all_changes(self) -> list[Change]:
         with self._connection() as conn, conn.cursor() as cur:
@@ -176,7 +204,7 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
                 """
                 SELECT id, business_id, competitor_id, type, before_json, after_json,
                        detected_at, magnitude, severity, impact_score, confidence,
-                       evidence_json, source
+                       source
                 FROM changes
                 ORDER BY detected_at ASC, id ASC
                 """
@@ -189,7 +217,7 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
             cur.execute(
                 """
                 SELECT id, competitor_id, rating, text, created_at, sentiment,
-                       topics_json, source, confidence
+                       topics_json, product_id, source, confidence
                 FROM reviews
                 ORDER BY created_at ASC, id ASC
                 """
@@ -244,14 +272,14 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
             "business_id": row["business_id"],
             "competitor_id": row["competitor_id"],
             "type": row["type"],
-            "before_json": json.dumps(row["before"]),
-            "after_json": json.dumps(row["after"]),
+            "before_json": Jsonb(row["before"]),
+            "after_json": Jsonb(row["after"]),
             "detected_at": row["detected_at"],
             "magnitude": row["magnitude"],
             "severity": row["severity"],
             "impact_score": row["impact_score"],
             "confidence": row["confidence"],
-            "evidence_json": json.dumps([]),
+            "evidence_json": Jsonb([]),
             "source": row["source"],
         }
 
@@ -265,7 +293,8 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
             "text": row["text"],
             "created_at": row["created_at"],
             "sentiment": row["sentiment"],
-            "topics_json": json.dumps(row["topics"]),
+            "topics_json": Jsonb(row["topics"]),
+            "product_id": row["product_id"],
             "source": row["source"],
             "confidence": row["confidence"],
         }
@@ -273,61 +302,34 @@ class PostgresIntelligenceRepository(IntelligenceRepository):
     @staticmethod
     def _change_from_row(row: tuple[Any, ...]) -> Change:
         return Change(
-            id=row[0],
-            business_id=row[1],
-            competitor_id=row[2],
-            type=row[3],
-            before=json.loads(row[4]) if row[4] is not None else None,
-            after=json.loads(row[5]) if row[5] is not None else None,
-            detected_at=row[6],
-            magnitude=row[7],
-            severity=row[8],
-            impact_score=row[9],
-            confidence=row[10],
-            source=row[12],
+            id=row[0], business_id=row[1], competitor_id=row[2], type=row[3],
+            before=row[4], after=row[5], detected_at=row[6],
+            magnitude=row[7], severity=row[8], impact_score=row[9],
+            confidence=row[10], source=row[11],
         )
 
     @staticmethod
     def _review_from_row(row: tuple[Any, ...]) -> Review:
         return Review(
-            id=row[0],
-            competitor_id=row[1],
-            rating=row[2],
-            text=row[3],
-            created_at=row[4],
-            sentiment=row[5],
-            topics=json.loads(row[6]),
-            source=row[7],
-            confidence=row[8],
+            id=row[0], competitor_id=row[1], rating=row[2], text=row[3],
+            created_at=row[4], sentiment=row[5], topics=row[6],
+            product_id=row[7], source=row[8], confidence=row[9],
         )
 
     @staticmethod
     def _prediction_from_row(row: tuple[Any, ...]) -> Prediction:
         return Prediction(
-            id=row[0],
-            competitor_id=row[1],
-            prediction_type=row[2],
-            predicted_at=row[3],
-            expected_window_days=row[4],
-            probability=row[5],
-            evidence_change_ids=json.loads(row[6]),
-            outcome=row[7],
-            outcome_at=row[8],
+            id=row[0], competitor_id=row[1], prediction_type=row[2],
+            predicted_at=row[3], expected_window_days=row[4], probability=row[5],
+            evidence_change_ids=row[6], outcome=row[7], outcome_at=row[8],
         )
 
     @staticmethod
     def _cost_signal_from_row(row: tuple[Any, ...]) -> CostSignal:
         return CostSignal(
-            id=row[0],
-            product_id=row[1],
-            type=row[2],
-            name=row[3],
-            before=row[4],
-            after=row[5],
-            unit=row[6] or "",
-            observed_at=row[7],
-            source=row[8],
-            confidence=row[9],
+            id=row[0], product_id=row[1], type=row[2], name=row[3],
+            before=row[4], after=row[5], unit=row[6] or "",
+            observed_at=row[7], source=row[8], confidence=row[9],
         )
 
     @staticmethod
