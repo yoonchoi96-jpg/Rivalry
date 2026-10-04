@@ -11,6 +11,8 @@ class AIProviderEvidence(BaseModel):
     latency_ms: int | None = None
     usage: dict[str, int] = Field(default_factory=dict)
     error: str | None = None
+    quality_score: float = Field(default=0, ge=0, le=100)
+    quality_reasons: list[str] = Field(default_factory=list)
 
 
 class MultiAIReport(BaseModel):
