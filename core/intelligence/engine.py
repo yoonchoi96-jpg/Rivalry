@@ -24,6 +24,7 @@ class IntelligenceStore:
     predictions: list[Prediction] = field(default_factory=list)
     cost_signal_items: list[CostSignal] = field(default_factory=list)
     alerts: list[dict[str, object]] = field(default_factory=list)
+    snapshots: dict[str, dict[str, object]] = field(default_factory=dict)
 
     def record_changes(self, changes: list[Change]) -> None:
         self.changes.extend(Change.model_validate(item.model_dump(mode="json")) for item in changes)
@@ -54,6 +55,12 @@ class IntelligenceStore:
             if c.business_id in (None, business_id)
         ]
         return AlertIntelligenceService.prioritize(values, 10)
+
+    def latest_snapshot(self, competitor_id: str) -> dict[str, object]:
+        return self.snapshots.get(competitor_id, {})
+
+    def record_snapshot(self, competitor_id: str, snapshot: dict[str, object]) -> None:
+        self.snapshots[competitor_id] = dict(snapshot)
 
     def competitor_history(self, competitor_id: str, days: int = 30) -> list[Change]:
         values = [
