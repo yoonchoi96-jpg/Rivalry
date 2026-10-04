@@ -38,7 +38,7 @@ class IntelligenceStore:
             for prediction in predictions:
                 repo.record_prediction(prediction)
         if cost_signal_items:
-            repo.cost_signal_items.extend(cost_signal_items)
+            repo.record_cost_signals(cost_signal_items)
         if alerts:
             for alert in alerts:
                 repo.record_alert(alert)
