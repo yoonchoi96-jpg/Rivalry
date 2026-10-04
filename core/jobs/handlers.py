@@ -11,6 +11,7 @@ from engines.prediction.models import Prediction
 from engines.recommendation.service import RecommendationService
 from engines.review.models import Review
 from engines.review.service import ReviewIntelligenceService
+from core.intelligence.engine import IntelligenceStore
 
 from .models import Job, JobType
 from .pipeline import detect_changes, normalize_collection
@@ -19,11 +20,12 @@ from .pipeline import detect_changes, normalize_collection
 class JobHandlers:
     """Application handlers kept independent from the queue implementation."""
 
-    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None) -> None:
+    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None) -> None:
         self.intelligence = intelligence or IntelligenceService()
         self.adapters = adapters or AdapterRegistry()
         self.recommendations = recommendations or RecommendationService()
         self.reviews = reviews or ReviewIntelligenceService()
+        self.store = store or IntelligenceStore()
         self._snapshots: dict[str, dict[str, object]] = {}
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
@@ -45,6 +47,9 @@ class JobHandlers:
         before = self._snapshots.get(competitor_id, {"prices": [], "products": []})
         changes = detect_changes(competitor_id, before, normalized, source=str(platform))
         self._snapshots[competitor_id] = normalized
+        typed_reviews = [Review.model_validate(item) for item in normalized["reviews"] if isinstance(item, dict)]
+        self.store.record_changes(changes)
+        self.store.record_reviews(typed_reviews)
         return {**normalized, "changes": [change.model_dump(mode="json") for change in changes]}
 
     def process_intelligence(self, job: Job) -> dict[str, object]:
@@ -66,7 +71,9 @@ class JobHandlers:
         if isinstance(hypotheses, list) and hypotheses and isinstance(hypotheses[0], dict):
             top_cause = str(hypotheses[0].get("type", "unknown"))
         recommendation = intelligence.get("recommendation")
-        return {"change_id": str(change.get("id", "")), "competitor_id": str(change.get("competitor_id", "")), "type": str(change.get("type", "UNKNOWN")), "impact_score": float(change.get("impact_score", 0)), "confidence": float(intelligence.get("confidence", 0)), "summary": str(intelligence.get("summary", "Material competitor change detected.")), "likely_cause": top_cause, "recommended_action": recommendation.get("action", "monitor") if isinstance(recommendation, dict) else "monitor"}
+        alert = {"change_id": str(change.get("id", "")), "competitor_id": str(change.get("competitor_id", "")), "type": str(change.get("type", "UNKNOWN")), "impact_score": float(change.get("impact_score", 0)), "confidence": float(intelligence.get("confidence", 0)), "summary": str(intelligence.get("summary", "Material competitor change detected.")), "likely_cause": top_cause, "recommended_action": recommendation.get("action", "monitor") if isinstance(recommendation, dict) else "monitor"}
+        self.store.record_alert(alert)
+        return alert
 
     def analyze_reviews(self, job: Job) -> dict[str, object]:
         raw_reviews = job.payload.get("reviews", [])
@@ -90,6 +97,7 @@ class JobHandlers:
         if repeated[0] is None or repeated[1] < 2:
             return {"prediction": None, "reason": "insufficient repeated change evidence"}
         prediction = Prediction(id=str(uuid4()), competitor_id=competitor_id, prediction_type=f"repeat_{repeated[0].lower()}", predicted_at=datetime.now(timezone.utc).isoformat(), expected_window_days=7, probability=min(95, 55 + repeated[1] * 10), evidence_change_ids=evidence)
+        self.store.record_prediction(prediction)
         return {"prediction": prediction.model_dump(mode="json")}
 
     def registry(self) -> dict[JobType, Any]:
