@@ -39,6 +39,9 @@ class FakeRedis:
     def zrangebyscore(self, key, minimum, maximum):
         return [value for value, score in self.delayed.items() if minimum <= score <= maximum]
 
+    def zcard(self, key):
+        return len(self.delayed)
+
     def zrem(self, key, value):
         self.delayed.pop(value, None)
 
@@ -54,6 +57,8 @@ class FakeRedis:
         self.acked.append((stream, group, message_id))
 
     def xlen(self, stream):
+        if stream.endswith(":dead-letter"):
+            return len(self.dead)
         return len(self.stream)
 
 
