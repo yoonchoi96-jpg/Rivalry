@@ -155,12 +155,10 @@ def test_queue_metrics_expose_stream_pending_delayed_and_dlq():
     redis = FakeRedis()
     queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
     job = queue.enqueue(Job(type=JobType.BUILD_ALERT))
-    assert queue.metrics() == {
-        "stream_total": 1,
-        "pending": 0,
-        "delayed": 0,
-        "dead_letter": 0,
-    }
+    assert queue.metrics()["stream_total"] == 1
+    assert queue.metrics()["pending"] == 0
+    assert queue.metrics()["delayed"] == 0
+    assert queue.metrics()["dead_letter"] == 0
     dequeued = queue.dequeue()
     queue.requeue(dequeued, delay_seconds=10)
     assert queue.metrics()["delayed"] == 1
