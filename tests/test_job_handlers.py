@@ -2,6 +2,7 @@ from adapters.base import PlatformAdapter
 from adapters.registry import AdapterRegistry
 from core.jobs.handlers import JobHandlers
 from core.jobs.models import Job, JobType
+from core.intelligence.engine import IntelligenceStore
 
 
 class FakeAdapter(PlatformAdapter):
@@ -92,3 +93,23 @@ def test_generate_prediction_requires_repeated_signal():
     }))
     assert result["prediction"]["competitor_id"] == "c1"
     assert result["prediction"]["evidence_change_ids"] == ["a", "b"]
+
+
+def test_worker_outputs_are_visible_in_intelligence_store():
+    store = IntelligenceStore()
+    handlers = JobHandlers(store=store)
+    change = {"id": "ch-store", "competitor_id": "c1", "type": "PRICE_CHANGED", "magnitude": 10, "impact_score": 72, "detected_at": "2026-10-04T00:00:00Z"}
+    alert = handlers.build_alert(Job(type=JobType.BUILD_ALERT, payload={
+        "change": change,
+        "intelligence": {"summary": "Material price change", "confidence": 80, "hypotheses": [{"type": "cost"}], "recommendation": {"action": "monitor_before_matching_price"}},
+    }))
+    assert store.alerts_for("c1") == [alert]
+
+    prediction = handlers.generate_prediction(Job(type=JobType.GENERATE_PREDICTION, payload={
+        "competitor_id": "c1",
+        "changes": [
+            {**change, "id": "a"},
+            {**change, "id": "b"},
+        ],
+    }))
+    assert store.predictions_for("c1")[0].id == prediction["prediction"]["id"]
