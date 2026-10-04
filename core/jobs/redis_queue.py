@@ -158,5 +158,24 @@ class RedisJobQueue:
         )
         return job
 
+    def metrics(self) -> dict[str, int]:
+        """Return Redis-backed queue state metrics for operational monitoring."""
+        pending = 0
+        xpending = getattr(self.client, "xpending", None)
+        if callable(xpending):
+            summary = xpending(self.stream, self.group)
+            if isinstance(summary, dict):
+                pending = int(summary.get("pending", 0))
+            elif isinstance(summary, (tuple, list)) and summary:
+                pending = int(summary[0])
+        zcard = getattr(self.client, "zcard", None)
+        delayed = int(zcard(self.delayed_key)) if callable(zcard) else 0
+        return {
+            "stream_total": int(self.client.xlen(self.stream)),
+            "pending": pending,
+            "delayed": delayed,
+            "dead_letter": int(self.client.xlen(self.dead_letter_stream)),
+        }
+
     def size(self) -> int:
         return int(self.client.xlen(self.stream))
