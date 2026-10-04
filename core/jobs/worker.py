@@ -93,10 +93,12 @@ class JobWorker:
                 job.finished_at = datetime.now(timezone.utc).isoformat()
                 self.queue.update(job)
                 self._ack(job)
+            elif job.error and job.error.startswith("No handler registered"):
+                job.finished_at = datetime.now(timezone.utc).isoformat()
+                self.queue.update(job)
+                self._dead_letter(job)
             elif job.attempts < job.max_attempts:
                 self._retry(job)
-                if self.queue.__class__.__name__ == "InMemoryJobQueue":
-                    job.status = JobStatus.FAILED
             else:
                 job.finished_at = datetime.now(timezone.utc).isoformat()
                 self.queue.update(job)
