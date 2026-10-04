@@ -84,16 +84,22 @@ class AdaptiveAIRouter:
             capability = self._capability_score(request.message.lower(), profile.capabilities)
             exploration = 95.0 if perf.samples == 0 else 70.0
             score = (
-                profile.suitability.get(request.use_case, 70.0) * 0.30
-                + capability * 0.15
+                profile.suitability.get(request.use_case, 70.0) * 0.20
+                + capability * 0.20
                 + perf.quality * 0.25
-                + latency * 0.15
-                + profile.cost_score * 0.10
+                + latency * 0.10
+                + profile.cost_score * 0.20
                 + exploration * 0.05
             )
             result.append(ProviderScore(name, round(score, 2), profile.suitability.get(request.use_case, 70.0), perf.quality, latency, profile.cost_score, exploration, capability))
         return sorted(result, key=lambda x: (x.score, x.provider), reverse=True)
 
+    @staticmethod
+    def _latency_score(latency_ms: float) -> float:
+        if latency_ms <= 500: return 100.0
+        if latency_ms <= 1500: return 90.0
+        if latency_ms <= 3000: return 75.0
+        return 50.0
 
     @staticmethod
     def _capability_score(text: str, capabilities: dict[str, float]) -> float:

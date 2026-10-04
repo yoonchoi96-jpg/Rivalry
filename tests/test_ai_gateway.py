@@ -30,7 +30,7 @@ def test_gateway_routes_chat_to_default_model():
 
     assert result.text == "테스트 응답"
     assert result.model == "gpt-5.6-luna"
-    assert client.responses.last["model"] == "gpt-6-luna"
+    assert client.responses.last["model"] == "gpt-5.6-luna"
 
 
 def test_gateway_uses_expert_model_and_preserves_tools():

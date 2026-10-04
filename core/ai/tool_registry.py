@@ -38,8 +38,8 @@ class RivalryToolRegistry:
         if store is None:
             return self._unavailable(name)
         mapping = {
-            "get_today_changes": lambda a: store.today_changes(a["business_id"], a.get("days", 1)),
-            "get_competitor_history": lambda a: store.competitor_history(a["competitor_id"], a.get("days", 30)),
+            "get_today_changes": lambda a: [item.model_dump() for item in store.today_changes(a["business_id"], a.get("days", 1))],
+            "get_competitor_history": lambda a: [item.model_dump() for item in store.competitor_history(a["competitor_id"], a.get("days", 30))],
             "get_review_trends": lambda a: store.review_trends(a["competitor_id"], a.get("days", 30)),
             "get_cost_signals": lambda a: store.cost_signals(a["product_id"], a.get("days", 30)),
             "get_rival_profile": lambda a: store.rival_profile(a["competitor_id"]),
