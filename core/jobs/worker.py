@@ -30,9 +30,9 @@ class JobWorker:
             ]
             reviews = job.result.get("reviews", [])
             competitor = job.result.get("competitor", {})
-            if isinstance(reviews, list) and isinstance(competitor, dict):
+            if isinstance(reviews, list) and reviews and isinstance(competitor, dict):
                 jobs.append(Job(type=JobType.ANALYZE_REVIEWS, payload={"reviews": reviews, "days": 3}))
-            if isinstance(competitor, dict) and competitor.get("id"):
+            if changes and isinstance(competitor, dict) and competitor.get("id"):
                 jobs.append(Job(
                     type=JobType.GENERATE_PREDICTION,
                     payload={"competitor_id": competitor["id"], "changes": changes},
