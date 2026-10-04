@@ -36,3 +36,4 @@ class Job(BaseModel):
     attempts: int = Field(default=0, ge=0)
     max_attempts: int = Field(default=3, ge=1, le=10)
     next_attempt_at: str | None = None
+    enqueue_version: int = Field(default=0, ge=0)

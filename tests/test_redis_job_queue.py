@@ -56,6 +56,12 @@ class FakeRedis:
     def xack(self, stream, group, message_id):
         self.acked.append((stream, group, message_id))
 
+    def eval(self, script, numkeys, marker, stream, raw):
+        if marker in self.keys:
+            return "0-0"
+        self.keys[marker] = "1"
+        return self.xadd(stream, {"job": raw})
+
     def xlen(self, stream):
         if stream.endswith(":dead-letter"):
             return len(self.dead)
@@ -167,3 +173,15 @@ def test_queue_metrics_expose_stream_pending_delayed_and_dlq():
     dequeued = queue.dequeue()
     queue.requeue(dequeued, delay_seconds=10)
     assert queue.metrics()["delayed"] == 1
+
+
+def test_outbox_reconciliation_publishes_pending_job_once():
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = Job(type=JobType.BUILD_ALERT)
+    job.enqueue_version = 1
+    store.prepare_enqueue(job)
+    assert queue.reconcile_outbox() == 1
+    assert queue.reconcile_outbox() == 0
+    assert len(redis.stream) == 1

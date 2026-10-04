@@ -38,6 +38,13 @@ class RedisJobQueue:
         self.dead_letter_stream = f"{stream}:dead-letter"
         self.idempotency_prefix = f"{stream}:idempotency:"
         self._message_ids: dict[str, str] = {}
+        self._publish_script = """
+        local created = redis.call("SET", KEYS[1], "1", "NX")
+        if created then
+            return redis.call("XADD", KEYS[2], "*", "job", ARGV[1])
+        end
+        return "0-0"
+        """
         self._ensure_group()
 
     def _ensure_group(self) -> None:
@@ -47,12 +54,42 @@ class RedisJobQueue:
             if "BUSYGROUP" not in str(exc):
                 raise
 
+    def _publish(self, job: Job) -> None:
+        raw = json.dumps(job.model_dump(mode="json"), sort_keys=True)
+        marker = f"{self.idempotency_prefix}published:{job.id}:{job.enqueue_version}"
+        eval_script = getattr(self.client, "eval", None)
+        if callable(eval_script):
+            eval_script(self._publish_script, 2, marker, self.stream, raw)
+        else:
+            self.client.xadd(self.stream, {"job": raw})
+
     def _enqueue_existing(self, job: Job) -> Job:
         job.status = JobStatus.QUEUED
         job.next_attempt_at = None
-        canonical = self.job_store.save(job)
-        self.client.xadd(self.stream, {"job": json.dumps(canonical.model_dump(mode="json"))})
+        job.enqueue_version += 1
+        prepare = getattr(self.job_store, "prepare_enqueue", None)
+        canonical = prepare(job) if callable(prepare) else self.job_store.save(job)
+        self._publish(canonical)
+        mark = getattr(self.job_store, "mark_outbox_published", None)
+        if callable(mark):
+            mark(canonical.id, canonical.enqueue_version)
         return self.job_store.get(canonical.id) or canonical
+
+    def reconcile_outbox(self, limit: int = 100) -> int:
+        pending = getattr(self.job_store, "pending_outbox", None)
+        if not callable(pending):
+            return 0
+        published = 0
+        for job in pending(limit):
+            try:
+                self._publish(job)
+                mark = getattr(self.job_store, "mark_outbox_published", None)
+                if callable(mark):
+                    mark(job.id, job.enqueue_version)
+                published += 1
+            except Exception:
+                continue
+        return published
 
     def enqueue(self, job: Job) -> Job:
         if job.idempotency_key:
@@ -84,6 +121,7 @@ class RedisJobQueue:
             self._enqueue_existing(job)
 
     def dequeue(self) -> Job | None:
+        self.reconcile_outbox()
         self._promote_due()
 
         xautoclaim = getattr(self.client, "xautoclaim", None)
@@ -147,10 +185,11 @@ class RedisJobQueue:
         return None
 
     def requeue(self, job: Job, *, delay_seconds: float = 0) -> Job:
-        self.ack(job)
         if delay_seconds <= 0:
+            self.ack(job)
             return self._enqueue_existing(job)
         job.status = JobStatus.QUEUED
+        job.enqueue_version += 1
         self.job_store.save(job)
         self.client.zadd(
             self.delayed_key,

@@ -22,3 +22,16 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency_key
     ON jobs (idempotency_key)
     WHERE idempotency_key IS NOT NULL;
+
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS enqueue_version INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS job_outbox (
+    job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+    enqueue_version INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMPTZ,
+    last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_job_outbox_pending
+    ON job_outbox (created_at ASC)
+    WHERE published_at IS NULL;
