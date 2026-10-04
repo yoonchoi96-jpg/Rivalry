@@ -24,6 +24,7 @@ class FakeSynthesizer:
             usage={},
             confidence=0,
             evidence=[],
+            routing={},
             model_copy=lambda update: SimpleNamespace(
                 text="통합 판단",
                 model=update["model"],
@@ -31,6 +32,7 @@ class FakeSynthesizer:
                 usage={},
                 confidence=update.get("confidence", 0),
                 evidence=update.get("evidence", []),
+                routing=update.get("routing", {}),
             ),
         )
 
