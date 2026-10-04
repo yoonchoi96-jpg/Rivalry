@@ -142,7 +142,7 @@ class MultiAIOrchestrator:
             return [future.result() for future in as_completed(futures)]
 
     def _adaptive_names(self, request: AIRequest, candidates: list[str]) -> list[str]:
-        candidates = self.router.limit_candidates(candidates, request.use_case, self.provider_health)
+        candidates = [name for name in dict.fromkeys(candidates) if self.provider_health.allow(name)]
         affinity = {"openai":100,"perplexity":98,"claude":96,"gemini":94,"deepseek":90,"naver":88,"qwen":88,"grok":86}
         scored = []
         for name in candidates:
@@ -151,7 +151,8 @@ class MultiAIOrchestrator:
             score = affinity.get(name,70)*0.45 + quality*0.30 + latency_score*0.15 + (95 if samples == 0 else 70)*0.10
             scored.append((score,name))
         scored.sort(reverse=True)
-        return [name for _,name in scored]
+        limit = {request.use_case: None}
+        return [name for _,name in scored[: {AIUseCase.CHAT:1, AIUseCase.INTELLIGENCE:3, AIUseCase.EXPERT:3}[request.use_case]]]
 
     def _record_performance(self, results: list[ProviderResult], qualities: dict[str,float]) -> None:
         for result in results:
