@@ -96,6 +96,13 @@ class AdaptiveAIRouter:
 
 
     @staticmethod
+    def _latency_score(latency_ms: float) -> float:
+        if latency_ms <= 500: return 100.0
+        if latency_ms <= 1500: return 90.0
+        if latency_ms <= 3000: return 75.0
+        return 50.0
+
+    @staticmethod
     def _capability_score(text: str, capabilities: dict[str, float]) -> float:
         signals = {
             "latest_web": ("최신", "오늘", "최근", "뉴스", "latest", "today", "news"),
