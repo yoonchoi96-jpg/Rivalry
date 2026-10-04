@@ -31,7 +31,7 @@ def _build_job_store() -> JobStore:
 def _build_job_queue(*, job_store: JobStore):
     redis_url = os.getenv("RIVALRY_REDIS_URL", "").strip()
     dsn = os.getenv("RIVALRY_DATABASE_URL", "").strip()
-    if _is_production() and bool(redis_url) != bool(dsn):
+    if _is_production() and (not redis_url or not dsn):
         raise RuntimeError(
             "Production runtime requires both RIVALRY_DATABASE_URL and RIVALRY_REDIS_URL"
         )

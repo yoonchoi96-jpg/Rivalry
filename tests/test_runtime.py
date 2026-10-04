@@ -14,6 +14,11 @@ def _reload_runtime(monkeypatch, *, production: bool, database: str = "", redis:
 
 def test_production_requires_both_database_and_redis(monkeypatch):
     with pytest.raises(RuntimeError, match="requires both"):
+        _reload_runtime(monkeypatch, production=True)
+
+
+def test_production_requires_both_database_and_redis_when_database_only(monkeypatch):
+    with pytest.raises(RuntimeError, match="requires both"):
         _reload_runtime(monkeypatch, production=True, database="postgresql://db")
 
 
