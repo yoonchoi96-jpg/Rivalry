@@ -5,7 +5,8 @@ import os
 import signal
 import time
 
-from .runtime import job_queue
+from .handlers import JobHandlers
+from .runtime import intelligence_store, job_queue
 from .worker import JobWorker
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,8 @@ def run_worker(*, poll_interval: float | None = None) -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
 
-    worker = JobWorker(job_queue)
+    handlers = JobHandlers(store=intelligence_store).registry()
+    worker = JobWorker(job_queue, handlers=handlers)
     logger.info("Rivalry worker started")
     while not stopping:
         job = worker.run_once()
