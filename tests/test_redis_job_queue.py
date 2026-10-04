@@ -211,7 +211,8 @@ class CrashRecoveryFakeRedis(FakeRedis):
         self.pending.pop(message_id, None)
 
 
-def test_xautoclaim_reclaims_pending_message_after_consumer_crash():    store = InMemoryJobStore()
+def test_xautoclaim_reclaims_pending_message_after_consumer_crash():
+    store = InMemoryJobStore()
     redis = CrashRecoveryFakeRedis()
     first = RedisJobQueue(
         "redis://unused", job_store=store, client=redis, consumer="worker-a", reclaim_after_ms=1
@@ -219,7 +220,9 @@ def test_xautoclaim_reclaims_pending_message_after_consumer_crash():    store = 
     job = first.enqueue(Job(type=JobType.BUILD_ALERT))
     dequeued = first.dequeue()
     assert dequeued is not None
-    second = RedisJobQueue("redis://unused", job_store=store, client=redis, consumer="worker-b", reclaim_after_ms=1)
+    second = RedisJobQueue(
+        "redis://unused", job_store=store, client=redis, consumer="worker-b", reclaim_after_ms=1
+    )
     reclaimed = second.dequeue()
     assert reclaimed is not None
     assert reclaimed.id == job.id
