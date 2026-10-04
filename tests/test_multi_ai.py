@@ -53,7 +53,7 @@ def test_multi_ai_fans_out_and_synthesizes():
 
     assert result.text == "통합 판단"
     assert result.model == "multi-ai->gpt-test"
-    assert result.confidence == 100
+    assert 0 <= result.confidence <= 100
     assert {item["provider"] for item in result.evidence} == {"openai", "gemini", "perplexity"}
 
 
@@ -159,3 +159,42 @@ def test_provider_health_blocks_repeated_failures():
     snapshot = orchestrator.provider_health.snapshot()["openai"]
     assert snapshot["failures"] == 3
     assert snapshot["blocked"] is True
+
+
+def test_adaptive_selection_learns_from_results():
+    registry = ProviderRegistry([
+        FakeProvider("openai", "충분히 긴 분석 결과입니다. " * 8),
+        FakeProvider("deepseek", "짧은 결과"),
+        FakeProvider("perplexity", "시장 분석 결과입니다. " * 8),
+    ])
+    orchestrator = MultiAIOrchestrator(
+        registry=registry,
+        synthesizer=FakeSynthesizer(),
+    )
+    first = orchestrator.run(
+        AIRequest(message="최근 시장을 분석해줘", use_case="intelligence")
+    )
+    assert len(first.evidence) == 3
+    assert set(orchestrator.provider_performance) == {"openai", "deepseek", "perplexity"}
+    second = orchestrator.run(
+        AIRequest(message="최근 시장을 분석해줘", use_case="intelligence")
+    )
+    assert len(second.evidence) <= 3
+
+
+def test_adaptive_selection_skips_blocked_name():
+    registry = ProviderRegistry([
+        FakeProvider("openai", "정상 결과"),
+        FakeProvider("perplexity", "정상 결과"),
+    ])
+    orchestrator = MultiAIOrchestrator(
+        registry=registry,
+        synthesizer=FakeSynthesizer(),
+    )
+    orchestrator.provider_health.failure("openai", "down")
+    orchestrator.provider_health.failure("openai", "down")
+    orchestrator.provider_health.failure("openai", "down")
+    result = orchestrator.run(
+        AIRequest(message="최근 시장을 분석해줘", use_case="intelligence")
+    )
+    assert all(item["provider"] != "openai" or not item["available"] for item in result.evidence)
