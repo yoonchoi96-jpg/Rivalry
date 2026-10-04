@@ -14,3 +14,6 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs (status, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_jobs_finished ON jobs (finished_at DESC);
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_jobs_next_attempt ON jobs (next_attempt_at) WHERE next_attempt_at IS NOT NULL;

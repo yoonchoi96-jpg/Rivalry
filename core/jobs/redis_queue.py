@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 from .models import Job, JobStatus
@@ -33,6 +34,8 @@ class RedisJobQueue:
         self.group = group
         self.consumer = consumer
         self.reclaim_after_ms = reclaim_after_ms
+        self.delayed_key = f"{stream}:delayed"
+        self.dead_letter_stream = f"{stream}:dead-letter"
         self._message_ids: dict[str, str] = {}
         self._ensure_group()
 
@@ -45,6 +48,7 @@ class RedisJobQueue:
 
     def enqueue(self, job: Job) -> Job:
         job.status = JobStatus.QUEUED
+        job.next_attempt_at = None
         self.job_store.save(job)
         self.client.xadd(self.stream, {"job": json.dumps(job.model_dump(mode="json"))})
         return self.job_store.get(job.id) or job
@@ -55,8 +59,17 @@ class RedisJobQueue:
         self._message_ids[job.id] = message_id
         return self.job_store.get(job.id) or job
 
+    def _promote_due(self) -> None:
+        now = time.time()
+        due = self.client.zrangebyscore(self.delayed_key, 0, now)
+        for raw in due:
+            job = Job.model_validate(json.loads(raw))
+            self.client.zrem(self.delayed_key, raw)
+            self.enqueue(job)
+
     def dequeue(self) -> Job | None:
-        # Recover messages abandoned by a worker that crashed after claiming them.
+        self._promote_due()
+
         xautoclaim = getattr(self.client, "xautoclaim", None)
         if callable(xautoclaim):
             claimed = xautoclaim(
@@ -96,14 +109,38 @@ class RedisJobQueue:
 
     def dead_letter(self, job: Job, reason: str) -> None:
         self.client.xadd(
-            f"{self.stream}:dead-letter",
+            self.dead_letter_stream,
             {"job": json.dumps(job.model_dump(mode="json")), "reason": reason},
         )
         self.ack(job)
 
-    def requeue(self, job: Job) -> Job:
+    def replay_dead_letter(self, job_id: str) -> Job | None:
+        entries = self.client.xrange(self.dead_letter_stream, count=1000)
+        for _, fields in entries:
+            raw = fields.get("job")
+            if not raw:
+                continue
+            job = Job.model_validate(json.loads(raw))
+            if job.id == job_id:
+                job.status = JobStatus.QUEUED
+                job.error = None
+                job.finished_at = None
+                job.next_attempt_at = None
+                self.enqueue(job)
+                return job
+        return None
+
+    def requeue(self, job: Job, *, delay_seconds: float = 0) -> Job:
         self.ack(job)
-        return self.enqueue(job)
+        if delay_seconds <= 0:
+            return self.enqueue(job)
+        job.status = JobStatus.QUEUED
+        self.job_store.save(job)
+        self.client.zadd(
+            self.delayed_key,
+            {json.dumps(job.model_dump(mode="json"), sort_keys=True): time.time() + delay_seconds},
+        )
+        return job
 
     def size(self) -> int:
         return int(self.client.xlen(self.stream))
