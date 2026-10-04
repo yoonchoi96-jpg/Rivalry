@@ -70,3 +70,25 @@ def test_multi_ai_research_prompt_preserves_observed_intelligence():
     )
     assert "Rivalry observed intelligence" in prompt
     assert "change_count" in prompt
+
+
+def test_provider_evidence_contains_telemetry():
+    class TelemetryProvider(FakeProvider):
+        def generate(self, prompt: str, *, system: str = "") -> ProviderResult:
+            return ProviderResult(
+                self.name,
+                self.model,
+                self.text,
+                latency_ms=12,
+                usage={"input_tokens": 10, "output_tokens": 5},
+            )
+
+    registry = ProviderRegistry([TelemetryProvider("openai", "openai-test")])
+    result = MultiAIOrchestrator(
+        registry=registry,
+        synthesizer=FakeSynthesizer(),
+    ).run(AIRequest(message="테스트"), providers=["openai"])
+
+    evidence = result.evidence[0]
+    assert evidence["latency_ms"] == 12
+    assert evidence["usage"]["input_tokens"] == 10
