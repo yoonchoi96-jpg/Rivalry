@@ -47,3 +47,13 @@ def test_collection_detects_price_change_on_second_snapshot():
     adapter.price = 110
     second = handlers.collect_competitor(job)
     assert any(c["type"] == "PRICE_CHANGED" for c in second["changes"])
+
+
+def test_process_intelligence_returns_recommendation():
+    handlers = JobHandlers()
+    job = Job(type=JobType.PROCESS_INTELLIGENCE, payload={
+        "change": {"id": "ch1", "competitor_id": "c1", "type": "PRICE_CHANGED", "before": 100, "after": 110, "magnitude": 10, "detected_at": "2026-10-04T00:00:00Z"}
+    })
+    result = handlers.process_intelligence(job)
+    assert result["change_id"] == "ch1"
+    assert result["recommendation"]["action"] == "monitor_before_matching_price"

@@ -5,6 +5,7 @@ from typing import Any
 from adapters.registry import AdapterRegistry
 from engines.change_detection.models import Change
 from engines.intelligence.service import IntelligenceService
+from engines.recommendation.service import RecommendationService
 
 from .models import Job, JobType
 from .pipeline import detect_changes, normalize_collection
@@ -13,9 +14,10 @@ from .pipeline import detect_changes, normalize_collection
 class JobHandlers:
     """Application handlers kept independent from the queue implementation."""
 
-    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None) -> None:
+    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None) -> None:
         self.intelligence = intelligence or IntelligenceService()
         self.adapters = adapters or AdapterRegistry()
+        self.recommendations = recommendations or RecommendationService()
         self._snapshots: dict[str, dict[str, object]] = {}
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
@@ -51,7 +53,8 @@ class JobHandlers:
             persistence=float(job.payload.get("persistence", 50)),
             evidence=[str(item) for item in job.payload.get("evidence", []) if isinstance(item, str)],
         )
-        return report.model_dump(mode="json")
+        recommendation = self.recommendations.recommend(change)
+        return {**report.model_dump(mode="json"), "recommendation": recommendation}
 
     def registry(self) -> dict[JobType, Any]:
         return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence}
