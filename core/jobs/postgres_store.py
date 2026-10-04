@@ -156,6 +156,26 @@ class PostgresJobStore(JobStore):
             enqueue_version=row[13],
         )
 
+    def claim(self, job_id: str, started_at: str) -> Job | None:
+        with self._connect(self.dsn) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE jobs
+                SET status='running',
+                    started_at=%s::timestamptz,
+                    finished_at=NULL,
+                    next_attempt_at=NULL,
+                    attempts=attempts + 1
+                WHERE id=%s AND status='queued'
+                RETURNING id, type, payload_json, idempotency_key, status, created_at, started_at,
+                          finished_at, error, result_json, attempts, max_attempts, next_attempt_at,
+                          enqueue_version
+                """,
+                (started_at, job_id),
+            )
+            row = cur.fetchone()
+        return self._row_to_job(row) if row else None
+
     def get(self, job_id: str) -> Job | None:
         with self._connect(self.dsn) as conn, conn.cursor() as cur:
             cur.execute(self._SELECT + " WHERE id=%s", (job_id,))

@@ -12,6 +12,7 @@ class JobQueue(Protocol):
     def dequeue(self) -> Job | None: ...
     def get(self, job_id: str) -> Job | None: ...
     def update(self, job: Job) -> Job: ...
+    def claim(self, job_id: str, started_at: str) -> Job | None: ...
 
 
 class InMemoryJobQueue:
@@ -36,6 +37,18 @@ class InMemoryJobQueue:
                 if job is not None and job.status == JobStatus.QUEUED:
                     return job
             return None
+
+    def claim(self, job_id: str, started_at: str) -> Job | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status != JobStatus.QUEUED:
+                return None
+            job.status = JobStatus.RUNNING
+            job.started_at = started_at
+            job.finished_at = None
+            job.next_attempt_at = None
+            job.attempts += 1
+            return job
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:

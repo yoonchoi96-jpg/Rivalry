@@ -13,6 +13,7 @@ class JobStore(Protocol):
     def prepare_enqueue(self, job: Job) -> Job: ...
     def pending_outbox(self, limit: int = 100) -> list[Job]: ...
     def mark_outbox_published(self, job_id: str, enqueue_version: int) -> None: ...
+    def claim(self, job_id: str, started_at: str) -> Job | None: ...
 
 
 class InMemoryJobStore:
@@ -57,6 +58,20 @@ class InMemoryJobStore:
         with self._lock:
             if self._outbox.get(job_id) == enqueue_version:
                 self._outbox.pop(job_id, None)
+
+    def claim(self, job_id: str, started_at: str) -> Job | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status != "queued":
+                return None
+            job = Job.model_validate(job.model_dump(mode="json"))
+            job.status = "running"
+            job.started_at = started_at
+            job.finished_at = None
+            job.next_attempt_at = None
+            job.attempts += 1
+            self._jobs[job.id] = job
+            return Job.model_validate(job.model_dump(mode="json"))
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:

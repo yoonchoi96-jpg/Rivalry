@@ -92,12 +92,13 @@ class JobWorker:
         job = self.queue.dequeue()
         if job is None:
             return None
-        job.status = JobStatus.RUNNING
-        job.started_at = datetime.now(timezone.utc).isoformat()
-        job.finished_at = None
-        job.next_attempt_at = None
-        job.attempts += 1
-        self.queue.update(job)
+        started_at = datetime.now(timezone.utc).isoformat()
+        claim = getattr(self.queue, "claim", None)
+        claimed = claim(job.id, started_at) if callable(claim) else None
+        if claimed is None:
+            self._ack(job)
+            return None
+        job = claimed
         try:
             handler = self.handlers.get(job.type)
             if handler is None:

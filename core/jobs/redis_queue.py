@@ -156,6 +156,10 @@ class RedisJobQueue:
     def update(self, job: Job) -> Job:
         return self.job_store.save(job)
 
+    def claim(self, job_id: str, started_at: str) -> Job | None:
+        claim = getattr(self.job_store, "claim", None)
+        return claim(job_id, started_at) if callable(claim) else None
+
     def ack(self, job: Job) -> None:
         message_id = self._message_ids.pop(job.id, None)
         if message_id:
