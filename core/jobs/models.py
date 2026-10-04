@@ -32,3 +32,5 @@ class Job(BaseModel):
     finished_at: str | None = None
     error: str | None = None
     result: dict[str, object] | None = None
+    attempts: int = Field(default=0, ge=0)
+    max_attempts: int = Field(default=3, ge=1, le=10)
