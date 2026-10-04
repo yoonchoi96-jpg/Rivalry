@@ -29,10 +29,11 @@ class MultiAIOrchestrator:
         self.quality_scorer = AIQualityScorer()
         self.provider_health = ProviderHealth()
         self.max_retries = 2
+        self.provider_performance = {}
 
     def run(self, request: AIRequest, *, providers: list[str] | None = None) -> AIResponse:
         decision = self.router.select(request) if providers is None else None
-        names = providers if providers is not None else decision.providers
+        names = providers if providers is not None else self._adaptive_names(request, decision.providers)
 
         if not names:
             return AIResponse(text="선택된 AI provider가 없습니다.", model="multi-ai", usage={})
@@ -82,6 +83,7 @@ class MultiAIOrchestrator:
                 ).model_dump()
             )
 
+        self._record_performance(results, quality_scores)
         confidence = round(sum(quality_scores) / len(quality_scores), 2) if quality_scores else 0.0
         return final.model_copy(update={
             "model": f"multi-ai->{final.model}",
@@ -138,6 +140,28 @@ class MultiAIOrchestrator:
         with ThreadPoolExecutor(max_workers=worker_count) as pool:
             futures = [pool.submit(call, name) for name in names]
             return [future.result() for future in as_completed(futures)]
+
+    def _adaptive_names(self, request: AIRequest, candidates: list[str]) -> list[str]:
+        candidates = self.router.limit_candidates(candidates, request.use_case, self.provider_health)
+        affinity = {"openai":100,"perplexity":98,"claude":96,"gemini":94,"deepseek":90,"naver":88,"qwen":88,"grok":86}
+        scored = []
+        for name in candidates:
+            quality, latency, samples = self.provider_performance.get(name, (70.0, 1500.0, 0))
+            latency_score = 100 if latency <= 500 else 90 if latency <= 1500 else 75 if latency <= 3000 else 50
+            score = affinity.get(name,70)*0.45 + quality*0.30 + latency_score*0.15 + (95 if samples == 0 else 70)*0.10
+            scored.append((score,name))
+        scored.sort(reverse=True)
+        return [name for _,name in scored]
+
+    def _record_performance(self, results: list[ProviderResult], qualities: dict[str,float]) -> None:
+        for result in results:
+            if not result.available:
+                continue
+            old_quality, old_latency, samples = self.provider_performance.get(result.provider,(70.0,1500.0,0))
+            alpha = 1.0 if samples == 0 else 0.35
+            quality = (1-alpha)*old_quality + alpha*qualities.get(result.provider,0.0)
+            latency = old_latency if result.latency_ms is None else (1-alpha)*old_latency + alpha*result.latency_ms
+            self.provider_performance[result.provider]=(round(quality,2),round(latency,2),samples+1)
 
     @staticmethod
     def _system() -> str:
