@@ -18,6 +18,8 @@ class JobType(StrEnum):
     COLLECT_COMPETITOR = "collect_competitor"
     PROCESS_INTELLIGENCE = "process_intelligence"
     BUILD_ALERT = "build_alert"
+    ANALYZE_REVIEWS = "analyze_reviews"
+    GENERATE_PREDICTION = "generate_prediction"
 
 
 class Job(BaseModel):
