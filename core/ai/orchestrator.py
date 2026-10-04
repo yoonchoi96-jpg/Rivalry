@@ -122,7 +122,11 @@ class MultiAIOrchestrator:
                         text=result.text,
                         available=result.available,
                         error=result.error,
-                        latency_ms=int((perf_counter() - started) * 1000),
+                        latency_ms=(
+                            result.latency_ms
+                            if result.latency_ms is not None
+                            else int((perf_counter() - started) * 1000)
+                        ),
                         usage=result.usage or {},
                     )
                 except Exception as exc:
