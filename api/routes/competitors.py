@@ -1,6 +1,7 @@
+from fastapi import APIRouter
+
 from core.jobs.runtime import competitor_service
 from engines.competitor.models import Competitor
-from fastapi import APIRouter
 
 router = APIRouter(prefix="/competitors", tags=["competitors"])
 
