@@ -1,9 +1,15 @@
-from fastapi import APIRouter
+from core.jobs.runtime import competitor_service
 from engines.competitor.models import Competitor
-from engines.competitor.service import CompetitorService
-router=APIRouter(prefix="/competitors",tags=["competitors"])
-service=CompetitorService()
-@router.get("",response_model=list[Competitor])
-def list_competitors(): return service.list()
-@router.post("",response_model=Competitor,status_code=201)
-def add_competitor(competitor:Competitor): return service.add(competitor)
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/competitors", tags=["competitors"])
+
+
+@router.get("", response_model=list[Competitor])
+def list_competitors() -> list[Competitor]:
+    return competitor_service.list()
+
+
+@router.post("", response_model=Competitor, status_code=201)
+def add_competitor(competitor: Competitor) -> Competitor:
+    return competitor_service.add(competitor)
