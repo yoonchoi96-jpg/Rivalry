@@ -5,6 +5,8 @@ import socket
 
 from core.intelligence.engine import IntelligenceStore
 from core.intelligence.postgres_repository import PostgresIntelligenceRepository
+from engines.competitor.repository import InMemoryCompetitorRepository, PostgresCompetitorRepository
+from engines.competitor.service import CompetitorService
 
 from .queue import InMemoryJobQueue
 from .redis_queue import RedisJobQueue
@@ -41,6 +43,13 @@ def _build_job_queue(*, job_store: JobStore):
     return InMemoryJobQueue()
 
 
+def _build_competitor_service() -> CompetitorService:
+    dsn = os.getenv("RIVALRY_DATABASE_URL", "").strip()
+    repository = PostgresCompetitorRepository(dsn) if dsn else InMemoryCompetitorRepository()
+    return CompetitorService(repository=repository)
+
+
 job_store = _build_job_store()
 job_queue = _build_job_queue(job_store=job_store)
 intelligence_store = _build_intelligence_store()
+competitor_service = _build_competitor_service()
