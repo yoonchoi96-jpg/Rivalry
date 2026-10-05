@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS businesses (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, country_code CHAR(2) NOT NULL,
     business_type TEXT NOT NULL, channel TEXT NOT NULL, location TEXT,
-    website_url TEXT, goal TEXT
+    website_url TEXT, goal TEXT, profile_json JSONB NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS platform_connections (
     id TEXT PRIMARY KEY, business_id TEXT NOT NULL, country_code CHAR(2) NOT NULL,
