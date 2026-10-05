@@ -18,7 +18,7 @@ def normalize_collection(payload: dict[str, object]) -> dict[str, object]:
     }
 
 
-def detect_changes(competitor_id: str, before: dict[str, object], after: dict[str, object], source: str = "") -> list[Change]:
+def detect_changes(competitor_id: str, before: dict[str, object], after: dict[str, object], source: str = "", business_id: str | None = None) -> list[Change]:
     changes: list[Change] = []
     old_prices = before.get("prices", [])
     new_prices = after.get("prices", [])
@@ -26,7 +26,7 @@ def detect_changes(competitor_id: str, before: dict[str, object], after: dict[st
         for old, new in zip(old_prices, new_prices):
             detected = detect_price_change(old, new)
             if detected:
-                changes.append(Change(id=str(uuid4()), competitor_id=competitor_id, detected_at=datetime.now(timezone.utc).isoformat(), source=source, **detected))
+                changes.append(Change(id=str(uuid4()), competitor_id=competitor_id, detected_at=datetime.now(timezone.utc).isoformat(), source=source, business_id=business_id, **detected))
     old_products = before.get("products", [])
     new_products = after.get("products", [])
     if isinstance(new_products, list) and isinstance(old_products, list):
