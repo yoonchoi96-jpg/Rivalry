@@ -1,7 +1,11 @@
 from fastapi import APIRouter
+
+from core.jobs.runtime import intelligence_store
 from engines.change_detection.models import Change
-from engines.change_detection.service import ChangeService
-router=APIRouter(prefix="/changes",tags=["changes"])
-service=ChangeService()
-@router.get("",response_model=list[Change])
-def list_changes(): return service.list()
+
+router = APIRouter(prefix="/changes", tags=["changes"])
+
+
+@router.get("", response_model=list[Change])
+def list_changes() -> list[Change]:
+    return sorted(intelligence_store.changes, key=lambda item: item.impact_score, reverse=True)
