@@ -27,7 +27,7 @@ Gateway, router, adaptive router, provider health, runtime with tool-calling, mu
 PostgreSQL job store (statuses, attempts, `max_attempts`, `next_attempt_at`, unique `idempotency_key`) + transactional outbox + Redis Streams queue; worker with retry/backoff, ack, dead-letter and follow-up jobs. Largely implemented; verify crash recovery of pending Redis messages.
 
 ## 9. API
-`/health`; `/api/v1`: `competitors` (GET/POST), `changes` (GET), `onboarding/state`, `ai/research`, `ai/chat`, `jobs` (POST, GET by id). No authentication on any route. No endpoints for snapshots, signals, recommendations, or job listing/DLQ.
+`/health`; `/api/v1`: `competitors` (GET/POST), `changes` (GET), `onboarding/state`, `ai/research`, `ai/chat`, `jobs` (POST, GET by id). Optional `X-API-Key` auth on `/api/v1` via `RIVALRY_API_KEY` (open when unset); `/health` is always open. No endpoints for snapshots, signals, recommendations, or job listing/DLQ.
 
 ## 10. Tests / CI
 Single CI job running `pytest -q` on Python 3.12 (green). Missing: lint, type checking, coverage, Postgres/Redis integration run. Found and fixed: `/ai/chat` raised `NameError` (`_intelligence_store`), masked as HTTP 502.
