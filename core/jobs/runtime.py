@@ -55,4 +55,3 @@ intelligence_store = _build_intelligence_store()
 
 
 competitor_service = _build_competitor_service()
-competitor_service = _build_competitor_service()
