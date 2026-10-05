@@ -23,6 +23,9 @@ class JobHandlers:
     def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None) -> None:
         self.intelligence = intelligence or IntelligenceService()
         self.adapters = adapters or AdapterRegistry()
+        if adapters is None:
+            from adapters.open_food_facts import OpenFoodFactsAdapter
+            self.adapters.register("GLOBAL", "openfoodfacts", OpenFoodFactsAdapter())
         self.recommendations = recommendations or RecommendationService()
         self.reviews = reviews or ReviewIntelligenceService()
         self.store = store or IntelligenceStore()
@@ -45,7 +48,7 @@ class JobHandlers:
         normalized = normalize_collection(data)
         competitor_id = str(competitor.get("id", ""))
         before = self.store.latest_snapshot(competitor_id) or {"prices": [], "products": []}
-        changes = detect_changes(competitor_id, before, normalized, source=str(platform))
+        changes = detect_changes(competitor_id, before, normalized, source=str(platform), business_id=str(competitor.get("business_id") or "") or None)
         self.store.record_snapshot(competitor_id, normalized)
         typed_reviews = [Review.model_validate(item) for item in normalized["reviews"] if isinstance(item, dict)]
         self.store.record_changes(changes)

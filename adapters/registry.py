@@ -13,5 +13,5 @@ class AdapterRegistry:
     def register(self, country_code: str, platform: str, adapter: PlatformAdapter):
         self._adapters[(country_code.upper(), platform.lower())] = adapter
     def get(self, country_code: str, platform: str):
-        return self._adapters.get((country_code.upper(), platform.lower()))
+        return self._adapters.get((country_code.upper(), platform.lower())) or self._adapters.get(("GLOBAL", platform.lower()))
     def supported(self): return list(self._adapters)
