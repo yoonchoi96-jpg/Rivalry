@@ -32,7 +32,7 @@ def research(request: AIRequest):
 @router.post("/chat", response_model=AIResponse)
 def chat(request: AIRequest):
     try:
-        registry = RivalryToolRegistry(intelligence_store=_intelligence_store)
+        registry = RivalryToolRegistry(intelligence_store=intelligence_store)
         runtime = AIRuntime(handlers=registry.handlers_for_runtime())
         return runtime.run(request, tools=registry.definitions())
     except Exception as exc:
