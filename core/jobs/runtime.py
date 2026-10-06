@@ -16,6 +16,7 @@ from core.impact.postgres_repository import PostgresImpactRepository
 from core.impact.repository import InMemoryImpactRepository
 from core.source.postgres_repository import PostgresSourceRepository
 from core.source.repository import InMemorySourceRepository
+from core.decision.registry import DecisionPolicyRegistry
 from engines.competitor.repository import InMemoryCompetitorRepository, PostgresCompetitorRepository
 from engines.competitor.service import CompetitorService
 from .queue import InMemoryJobQueue
@@ -51,6 +52,7 @@ measurement_repository = _repo(PostgresMeasurementRepository, InMemoryMeasuremen
 signal_repository = _repo(PostgresSignalRepository, InMemorySignalRepository)
 impact_repository = _repo(PostgresImpactRepository, InMemoryImpactRepository)
 source_repository = _repo(PostgresSourceRepository, InMemorySourceRepository)
+decision_policy_registry = DecisionPolicyRegistry()
 job_store = _build_job_store()
 job_queue = _build_job_queue(job_store=job_store)
 intelligence_store = _build_intelligence_store()
