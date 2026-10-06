@@ -19,6 +19,8 @@ from core.source.repository import InMemorySourceRepository
 from core.decision.postgres_repository import PostgresDecisionPolicyRepository
 from core.decision.repository import InMemoryDecisionPolicyRepository
 from core.decision.registry import DecisionPolicyRegistry
+from core.decision.postgres_recommendation_repository import PostgresDecisionRecommendationRepository
+from core.decision.recommendation_repository import InMemoryDecisionRecommendationRepository
 from engines.competitor.repository import InMemoryCompetitorRepository, PostgresCompetitorRepository
 from engines.competitor.service import CompetitorService
 from .queue import InMemoryJobQueue
@@ -56,6 +58,10 @@ impact_repository = _repo(PostgresImpactRepository, InMemoryImpactRepository)
 source_repository = _repo(PostgresSourceRepository, InMemorySourceRepository)
 decision_policy_registry = DecisionPolicyRegistry(
     repository=_repo(PostgresDecisionPolicyRepository, InMemoryDecisionPolicyRepository)
+)
+decision_recommendation_repository = _repo(
+    PostgresDecisionRecommendationRepository,
+    InMemoryDecisionRecommendationRepository,
 )
 job_store = _build_job_store()
 job_queue = _build_job_queue(job_store=job_store)
