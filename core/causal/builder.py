@@ -5,7 +5,6 @@ from core.business.models import BusinessProfile
 from core.causal.models import CausalFactor, CausalMap, CausalRelation
 from core.intent.models import IntentKind
 
-
 _BASE_FACTORS = (
     ("demand", "고객 수요", CausalRelation.DIRECT, "매출·주문 변화는 수요 변화와 직접 연결될 수 있습니다."),
     ("competitive_price", "경쟁 가격", CausalRelation.DIRECT, "경쟁사의 가격 변화는 고객의 선택과 가격 경쟁에 직접 영향을 줄 수 있습니다."),
@@ -19,16 +18,9 @@ _BASE_FACTORS = (
     ("customer_outcome", "매출·마진 결과", CausalRelation.DOWNSTREAM, "최종 사업 결과를 관찰하면 원인 가설의 영향을 검증할 수 있습니다."),
 )
 
-
-def build_causal_map(
-    question: str,
-    business: BusinessEntity,
-    *,
-    intent: IntentKind = IntentKind.UNDERSTAND,
-) -> CausalMap:
+def build_causal_map(question: str, business: BusinessEntity, *, intent: IntentKind = IntentKind.UNDERSTAND) -> CausalMap:
     profile = BusinessProfile.model_validate(business.profile) if business.profile else BusinessProfile()
     factors: list[CausalFactor] = []
-
     for key, label, relation, rationale in _BASE_FACTORS:
         priority = 50
         if intent in {IntentKind.EXPLAIN, IntentKind.DECIDE, IntentKind.PREDICT}:
@@ -38,14 +30,7 @@ def build_causal_map(
         if relation == CausalRelation.DIRECT and profile.channel_count >= 2:
             priority += 10
         if key == "fx_logistics" and (profile.geographic_scope or "").lower() in {"international", "global"}:
-            priority += 25
-        factors.append(CausalFactor(
-            key=key,
-            label=label,
-            relation=relation,
-            rationale=rationale,
-            priority=min(priority, 100),
-        ))
-
+            priority += 20
+        factors.append(CausalFactor(key=key, label=label, relation=relation, rationale=rationale, priority=min(priority, 100)))
     factors.sort(key=lambda item: item.priority, reverse=True)
     return CausalMap(question=question, factors=factors)
