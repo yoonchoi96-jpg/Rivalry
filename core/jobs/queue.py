@@ -15,15 +15,23 @@ class JobQueue(Protocol):
 
 
 class InMemoryJobQueue:
-    """Small queue seam for the MVP; replace storage without changing callers."""
+    """Small queue seam for the MVP; mirrors durable idempotent enqueue semantics."""
 
     def __init__(self) -> None:
         self._pending: deque[str] = deque()
         self._jobs: dict[str, Job] = {}
+        self._idempotency: dict[str, str] = {}
         self._lock = Lock()
 
     def enqueue(self, job: Job) -> Job:
         with self._lock:
+            if job.idempotency_key:
+                existing_id = self._idempotency.get(job.idempotency_key)
+                if existing_id:
+                    existing = self._jobs.get(existing_id)
+                    if existing is not None:
+                        return existing
+                self._idempotency[job.idempotency_key] = job.id
             self._jobs[job.id] = job
             self._pending.append(job.id)
             return job
@@ -44,6 +52,8 @@ class InMemoryJobQueue:
     def update(self, job: Job) -> Job:
         with self._lock:
             self._jobs[job.id] = job
+            if job.idempotency_key:
+                self._idempotency[job.idempotency_key] = job.id
             return job
 
     def size(self) -> int:
