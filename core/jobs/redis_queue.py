@@ -95,7 +95,10 @@ class RedisJobQueue:
         # that gap could permanently suppress the job from the outbox.
         if job.idempotency_key:
             existing = self.job_store.get_by_idempotency_key(job.idempotency_key)
-            if existing is not None and existing.id != job.id:
+            if existing is not None:
+                # Public enqueue is idempotent even when the caller reuses the
+                # same Job object. Retries use requeue()/_enqueue_existing()
+                # explicitly, so they can advance enqueue_version safely.
                 return existing
         return self._enqueue_existing(job)
 
