@@ -20,6 +20,7 @@ from core.impact.repository import InMemoryImpactRepository
 from core.action.dispatcher import ActionDispatcher
 from core.measurement.engine import MeasurementEngine
 from core.measurement.registry import MeasurementRegistry, DEFAULT_MEASUREMENTS
+from core.impact.scorer import build_business_impact
 from core.evidence.models import AccessMethod, KnowledgeKind
 from core.observation.models import Observation
 from hashlib import sha256
@@ -234,6 +235,16 @@ class JobHandlers:
         if self.signal_repository is None:
             raise RuntimeError("signal repository is not configured")
         self.signal_repository.save(signal)
+        impact = build_business_impact(
+            id=sha256(f"research-impact:{signal.id}".encode()).hexdigest()[:32],
+            business_id=str(job.payload.get("business_id") or current.entity_id),
+            signal=signal,
+            factor_key=definition_key,
+            exposure=float(job.payload.get("exposure", 0.5)),
+            magnitude=measurement.value,
+            rationale=f"Research observation changed versus reference: {measurement.value:.4f}",
+        )
+        self.impact_repository.save(impact)
         measurement_repository = getattr(self, "measurement_repository", None)
         if measurement_repository is not None:
             measurement_repository.save(measurement)
@@ -241,6 +252,8 @@ class JobHandlers:
             "measurement": measurement.model_dump(mode="json"),
             "signal": signal.model_dump(mode="json"),
             "reference_observation_id": reference.id,
+            "impact": impact.model_dump(mode="json"),
+            "policy_id": job.payload.get("policy_id"),
         }
 
     def execute_research(self, job: Job) -> dict[str, object]:
