@@ -185,3 +185,27 @@ def test_outbox_reconciliation_publishes_pending_job_once():
     assert queue.reconcile_outbox() == 1
     assert queue.reconcile_outbox() == 0
     assert len(redis.stream) == 1
+
+def test_stale_stream_delivery_is_acknowledged_after_delayed_requeue(monkeypatch):
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = queue.enqueue(Job(type=JobType.BUILD_ALERT))
+
+    stale_entry = redis.stream[0]
+    dequeued = queue.dequeue()
+    monkeypatch.setattr("core.jobs.redis_queue.time.time", lambda: 100.0)
+    queue.requeue(dequeued, delay_seconds=10)
+
+    monkeypatch.setattr("core.jobs.redis_queue.time.time", lambda: 111.0)
+    queue._promote_due()
+
+    # Simulate the original pending stream delivery becoming visible again
+    # after the delayed retry was already published.
+    redis.stream.insert(0, stale_entry)
+
+    promoted = queue.dequeue()
+    assert promoted is not None
+    assert promoted.id == job.id
+    assert len(redis.acked) == 1
+    assert redis.acked[0][2] == stale_entry[0]
