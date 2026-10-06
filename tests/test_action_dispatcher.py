@@ -26,3 +26,12 @@ def test_recommendation_dispatches_research_actions_to_research():
 def test_recommendation_dispatches_other_actions_to_alert():
     action = ActionDispatcher().dispatch(make_recommendation("monitor_before_matching_price"))
     assert action.kind == ActionKind.ALERT
+
+
+def test_research_action_builds_executable_follow_up_plan():
+    action = ActionDispatcher().dispatch(make_recommendation("investigate"))
+    assert action.kind == ActionKind.RESEARCH
+    assert action.follow_up_job.value == "execute_research"
+    plan = action.follow_up_payload["plan"]
+    assert plan["tasks"][0]["factor_key"] == "competitive_price"
+    assert plan["tasks"][0]["method"] == "web"
