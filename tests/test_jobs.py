@@ -90,6 +90,43 @@ def test_worker_marks_missing_handler_as_failed():
     assert completed.finished_at is not None
 
 
+def test_legacy_follow_ups_have_deterministic_idempotency_keys():
+    worker = JobWorker(InMemoryJobQueue())
+    parent = Job(
+        type=JobType.COLLECT_COMPETITOR,
+        result={
+            "changes": [{"id": "c1"}, {"id": "c2"}],
+            "reviews": [{"id": "r1"}],
+            "competitor": {"id": "comp-1"},
+        },
+        status=JobStatus.SUCCEEDED,
+    )
+
+    follow_ups = worker._follow_up_jobs(parent)
+
+    assert [job.idempotency_key for job in follow_ups] == [
+        f"process-intelligence:{parent.id}:0",
+        f"process-intelligence:{parent.id}:1",
+        f"analyze-reviews:{parent.id}",
+        f"generate-prediction:{parent.id}",
+    ]
+
+
+def test_process_intelligence_follow_up_has_deterministic_idempotency_key():
+    worker = JobWorker(InMemoryJobQueue())
+    parent = Job(
+        type=JobType.PROCESS_INTELLIGENCE,
+        payload={"change": {"id": "c1"}},
+        result={"score": 1},
+        status=JobStatus.SUCCEEDED,
+    )
+
+    follow_ups = worker._follow_up_jobs(parent)
+
+    assert len(follow_ups) == 1
+    assert follow_ups[0].idempotency_key == f"build-alert:{parent.id}"
+
+
 def test_research_ingest_follow_up_is_idempotent():
     queue = InMemoryJobQueue()
     worker = JobWorker(queue)
