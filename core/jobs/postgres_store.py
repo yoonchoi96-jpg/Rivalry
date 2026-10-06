@@ -113,6 +113,26 @@ class PostgresJobStore(JobStore):
                     if existing[0] != job.id:
                         return self._row_to_job(existing)
 
+                    # A retry/requeue keeps the same job id and idempotency key.
+                    # Refresh the durable job row before updating the outbox so
+                    # the outbox version and the job state always describe the
+                    # same enqueue attempt.
+                    cur.execute(
+                        """
+                        UPDATE jobs SET
+                            type=%(type)s, payload_json=%(payload_json)s,
+                            idempotency_key=%(idempotency_key)s, status=%(status)s,
+                            started_at=%(started_at)s::timestamptz,
+                            finished_at=%(finished_at)s::timestamptz, error=%(error)s,
+                            result_json=%(result_json)s, attempts=%(attempts)s,
+                            max_attempts=%(max_attempts)s,
+                            next_attempt_at=%(next_attempt_at)s::timestamptz,
+                            enqueue_version=%(enqueue_version)s
+                        WHERE id=%(id)s
+                        """,
+                        params,
+                    )
+
             if not job.idempotency_key:
                 cur.execute(
                     """
