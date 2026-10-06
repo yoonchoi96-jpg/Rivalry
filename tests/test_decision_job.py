@@ -111,3 +111,25 @@ def test_generate_decision_requires_existing_policy():
         assert "decision policy not found" in str(exc)
     else:
         raise AssertionError("missing policy must fail")
+
+
+def test_dispatch_action_persists_recommendation_alert():
+    handlers, _ = make_handlers()
+    generated = handlers.generate_decision(
+        Job(
+            type=JobType.GENERATE_DECISION,
+            payload={"impact_id": "i-job", "policy_id": "policy-job-v1"},
+        )
+    )
+
+    result = handlers.dispatch_action(
+        Job(
+            type=JobType.DISPATCH_ACTION,
+            payload={"recommendation": generated["recommendation"]},
+        )
+    )
+
+    assert result["action"]["kind"] == "research"
+    assert result["alert"]["type"] == "DECISION_RECOMMENDATION"
+    assert result["alert"]["recommendation_id"] == "i-job"
+    assert handlers.store.alerts[-1]["recommended_action"] == "review"
