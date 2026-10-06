@@ -18,6 +18,9 @@ from core.decision.models import DecisionPolicy, DecisionRecommendation
 from core.decision.recommendation_repository import InMemoryDecisionRecommendationRepository
 from core.impact.repository import InMemoryImpactRepository
 from core.action.dispatcher import ActionDispatcher
+from core.evidence.models import AccessMethod, KnowledgeKind
+from core.observation.models import Observation
+from hashlib import sha256
 
 from .models import Job, JobType
 from .pipeline import detect_changes, normalize_collection
@@ -40,6 +43,7 @@ class JobHandlers:
         self.decision_policies = decision_policies
         self.decision_recommendations = decision_recommendations or InMemoryDecisionRecommendationRepository()
         self.signal_repository = signal_repository
+        self.observation_repository = observation_repository
 
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
