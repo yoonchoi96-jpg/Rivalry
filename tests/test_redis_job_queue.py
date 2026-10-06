@@ -140,9 +140,11 @@ def test_idempotent_delayed_requeue_is_promoted(monkeypatch):
     queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
     job = queue.enqueue(Job(type=JobType.BUILD_ALERT, idempotency_key="delay-123"))
     dequeued = queue.dequeue()
-    monkeypatch.setattr("core.jobs.redis_queue.time.time", lambda: 100.0)
     queue.requeue(dequeued, delay_seconds=10)
-    monkeypatch.setattr("core.jobs.redis_queue.time.time", lambda: 111.0)
+    scheduled = store.get(job.id)
+    assert scheduled is not None
+    scheduled.next_attempt_at = "2000-01-01T00:00:00+00:00"
+    store.save(scheduled)
     promoted = queue.dequeue()
     assert promoted is not None
     assert promoted.id == job.id
@@ -225,3 +227,30 @@ def test_enqueue_does_not_require_redis_idempotency_claim_before_durable_prepare
     assert store.get(job.id) is not None
     assert len(redis.stream) == 1
 
+
+def test_immediate_requeue_publishes_before_ack(monkeypatch):
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = queue.enqueue(Job(type=JobType.BUILD_ALERT))
+    dequeued = queue.dequeue()
+
+    original_ack = queue.ack
+    seen = {"stream": 0}
+
+    def failing_ack(item):
+        seen["stream"] = len(redis.stream)
+        raise RuntimeError("simulated crash during ack")
+
+    queue.ack = failing_ack
+    try:
+        queue.requeue(dequeued)
+    except RuntimeError:
+        pass
+
+    durable = store.get(job.id)
+    assert durable is not None
+    assert durable.status == "queued"
+    assert seen["stream"] == 1
+    assert len(redis.stream) == 1
+    queue.ack = original_ack
