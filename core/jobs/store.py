@@ -14,6 +14,7 @@ class JobStore(Protocol):
     def prepare_enqueue(self, job: Job) -> Job: ...
     def pending_outbox(self, limit: int = 100) -> list[Job]: ...
     def mark_outbox_published(self, job_id: str, enqueue_version: int) -> None: ...
+    def count_scheduled(self) -> int: ...
 
 
 class InMemoryJobStore:
@@ -68,6 +69,17 @@ class InMemoryJobStore:
         with self._lock:
             if self._outbox.get(job_id) == enqueue_version:
                 self._outbox.pop(job_id, None)
+
+    def count_scheduled(self) -> int:
+        with self._lock:
+            now = datetime.now(timezone.utc)
+            return sum(
+                1
+                for job_id in self._outbox
+                if job_id in self._jobs
+                and self._jobs[job_id].next_attempt_at
+                and datetime.fromisoformat(self._jobs[job_id].next_attempt_at) > now
+            )
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
