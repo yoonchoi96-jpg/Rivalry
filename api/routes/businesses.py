@@ -3,11 +3,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from core.business.entity import BusinessEntity
-from core.business.repository import InMemoryBusinessRepository
+from core.jobs.runtime import business_repository
 
 router = APIRouter(prefix="/businesses", tags=["businesses"])
 
-business_repository = InMemoryBusinessRepository()
 
 
 @router.post("", response_model=BusinessEntity, status_code=201)
