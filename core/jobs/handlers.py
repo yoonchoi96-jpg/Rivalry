@@ -176,6 +176,11 @@ class JobHandlers:
         return {"action": action.model_dump(mode="json"), "alert": alert}
 
 
+    @staticmethod
+    def _measurement_definition(factor_key: str) -> str:
+        aliases = {"competitive_price": "competitive_price_pressure", "price": "competitive_price_pressure", "fx_rate": "fx_exposure"}
+        return aliases.get(factor_key, factor_key)
+
     def ingest_research(self, job: Job) -> dict[str, object]:
         raw = job.payload.get("research")
         if not isinstance(raw, dict):
@@ -207,7 +212,7 @@ class JobHandlers:
                 access_method=AccessMethod.WEB,
                 confidence=float(evidence.get("confidence", 0.5)),
                 knowledge_kind=KnowledgeKind.FACT,
-                provenance={"research_question": raw.get("question"), "research_factor": item.get("factor_key"), "structured": bool(structured)},
+                provenance={"research_question": raw.get("question"), "research_factor": item.get("factor_key"), "measurement_definition": self._measurement_definition(str(item.get("factor_key") or "")), "structured": bool(structured)},
             )
             self.observation_repository.save(observation)
             observations.append(observation.model_dump(mode="json"))
