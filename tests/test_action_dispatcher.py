@@ -35,6 +35,7 @@ def test_research_action_builds_executable_follow_up_plan():
     plan = action.follow_up_payload["plan"]
     assert plan["tasks"][0]["factor_key"] == "competitive_price"
     assert plan["tasks"][0]["method"] == "web"\n    assert plan["tasks"][0]["priority"] == 80
+    assert action.follow_up_payload["exposure"] == 0.5
 
 
 def test_unknown_action_defaults_to_safe_alert():
