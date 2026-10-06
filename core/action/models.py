@@ -25,3 +25,4 @@ class RecommendationAction(BaseModel):
     factor_key: str
     policy_id: str | None = None
     follow_up_job: JobType | None = None
+    follow_up_payload: dict[str, object] | None = None
