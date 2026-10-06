@@ -30,7 +30,7 @@ def build_research_plan(
                 sources,
             )
             if route.routes:
-                method = ResearchMethod(route.routes[0].source_id)
+                method = ResearchMethod(route.routes[0].kind.value)
             else:
                 method = default_method
 
