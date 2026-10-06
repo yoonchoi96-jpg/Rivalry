@@ -18,7 +18,6 @@ from core.decision.models import DecisionPolicy, DecisionRecommendation
 from core.decision.recommendation_repository import InMemoryDecisionRecommendationRepository
 from core.impact.repository import InMemoryImpactRepository
 from core.action.dispatcher import ActionDispatcher
-from core.decision.models import DecisionRecommendation
 
 from .models import Job, JobType
 from .pipeline import detect_changes, normalize_collection
@@ -148,12 +147,13 @@ class JobHandlers:
             raise ValueError("dispatch_action requires payload.recommendation")
         recommendation = DecisionRecommendation.model_validate(raw)
         action = ActionDispatcher().dispatch(recommendation)
+        impact = self.impact_repository.get(recommendation.impact_id)
         alert = {
             "id": f"recommendation:{recommendation.impact_id}",
             "change_id": recommendation.impact_id,
             "competitor_id": recommendation.business_id,
             "type": "DECISION_RECOMMENDATION",
-            "impact_score": recommendation.priority * 100,
+            "impact_score": (impact.magnitude * impact.exposure * 100) if impact is not None else recommendation.priority * 100,
             "confidence": recommendation.confidence * 100,
             "summary": recommendation.rationale,
             "likely_cause": recommendation.factor_key,
@@ -162,6 +162,7 @@ class JobHandlers:
             "recommendation_id": action.recommendation_id,
             "signal_id": action.signal_id,
             "policy_id": action.policy_id,
+            "follow_up_job": action.follow_up_job.value if action.follow_up_job else None,
         }
         self.store.record_alert(alert)
         return {"action": action.model_dump(mode="json"), "alert": alert}
