@@ -94,3 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_business_impacts_business_priority
     ON business_impacts (business_id, significance DESC);
 CREATE INDEX IF NOT EXISTS idx_business_impacts_signal
     ON business_impacts (signal_id);
+
+
+CREATE INDEX IF NOT EXISTS idx_source_profiles_kind_reliability
+    ON source_profiles (kind, reliability DESC);
