@@ -169,6 +169,93 @@ def test_dispatch_action_alert_identity_preserves_action_revision():
     assert alerts[1]["recommended_action"] == "monitor"
 
 
+def test_worker_runs_research_to_decision_to_alert_loop():
+    from core.measurement.repository import InMemoryMeasurementRepository
+
+    observations = InMemoryObservationRepository()
+    measurements = InMemoryMeasurementRepository()
+    signals = InMemorySignalRepository()
+    impacts = InMemoryImpactRepository()
+    policies = DecisionPolicyRegistry()
+    policies.register(
+        "policy-loop-v1",
+        DecisionPolicy(
+            name="loop",
+            default_action="monitor",
+            default_rationale="monitor after verification",
+            rules=[
+                DecisionPolicyRule(
+                    factor_key="competitive_price",
+                    min_impact=0.05,
+                    max_impact=1.0,
+                    action="review",
+                    rationale="verified price movement requires review",
+                )
+            ],
+        ),
+    )
+    handlers = JobHandlers(
+        impact_repository=impacts,
+        decision_policies=policies,
+        decision_recommendations=InMemoryDecisionRecommendationRepository(),
+        signal_repository=signals,
+        observation_repository=observations,
+        measurement_repository=measurements,
+    )
+    handlers.ingest_research(Job(
+        type=JobType.INGEST_RESEARCH,
+        payload={"business_id": "b-loop", "research": {"question": "seed", "tasks": [{
+            "factor_key": "competitive_price",
+            "evidence": {"id": "seed-price", "captured_at": "2026-10-06T00:00:00Z",
+                         "observation": {"normalized_value": 100, "unit": "KRW", "currency": "KRW"}},
+        }]}},
+    ))
+
+    class FakeResearch:
+        def execute(self, _plan):
+            return {
+                "question": "verify price",
+                "tasks": [{
+                    "factor_key": "competitive_price",
+                    "source_id": "web",
+                    "evidence": {
+                        "id": "verified-price",
+                        "statement": "price verified",
+                        "captured_at": "2026-10-07T00:00:00Z",
+                        "confidence": 0.95,
+                        "observation": {"normalized_value": 110, "unit": "KRW", "currency": "KRW", "raw_value": "110 KRW"},
+                    },
+                }],
+            }
+
+    handlers.research = FakeResearch()
+    from core.jobs.queue import InMemoryJobQueue
+    from core.jobs.worker import JobWorker
+    queue = InMemoryJobQueue()
+    queue.enqueue(Job(
+        type=JobType.EXECUTE_RESEARCH,
+        payload={
+            "business_id": "b-loop", "policy_id": "policy-loop-v1", "exposure": 0.8,
+            "plan": {"question": "verify price", "tasks": [{
+                "factor_key": "competitive_price", "objective": "verify price",
+                "method": "web", "priority": 80, "freshness_minutes": 1440,
+            }]},
+        },
+    ))
+    worker = JobWorker(queue, handlers=handlers.registry(), retry_base_seconds=0)
+    completed = worker.drain(limit=5)
+
+    assert [job.type for job in completed] == [
+        JobType.EXECUTE_RESEARCH, JobType.INGEST_RESEARCH,
+        JobType.REPROCESS_OBSERVATION, JobType.GENERATE_DECISION,
+        JobType.DISPATCH_ACTION,
+    ]
+    assert completed[-1].result["action"]["kind"] == "alert"
+    assert completed[-1].result["alert"]["recommended_action"] == "review"
+    assert completed[-1].result["alert"]["impact_score"] == 8.0
+    assert len(handlers.store.alerts) == 1
+
+
 def test_ingest_research_persists_observation_lineage():
     observations = InMemoryObservationRepository()
     handlers = JobHandlers(observation_repository=observations)
