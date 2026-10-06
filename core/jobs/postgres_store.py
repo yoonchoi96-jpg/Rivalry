@@ -81,33 +81,61 @@ class PostgresJobStore(JobStore):
     def prepare_enqueue(self, job: Job) -> Job:
         params = self._params(job)
         with self._connect(self.dsn) as conn, conn.cursor() as cur:
+            inserted = False
             if job.idempotency_key:
-                cur.execute(self._SELECT + " WHERE idempotency_key=%s", (job.idempotency_key,))
-                existing = cur.fetchone()
-                if existing is not None and existing[0] != job.id:
+                # The partial unique index is the concurrency authority. The
+                # pre-check is only a fast path; concurrent callers can race.
+                cur.execute(
+                    """
+                    INSERT INTO jobs (
+                        id, type, payload_json, idempotency_key, status, created_at, started_at,
+                        finished_at, error, result_json, attempts, max_attempts, next_attempt_at,
+                        enqueue_version
+                    )
+                    VALUES (
+                        %(id)s, %(type)s, %(payload_json)s, %(idempotency_key)s, %(status)s,
+                        %(created_at)s::timestamptz, %(started_at)s::timestamptz,
+                        %(finished_at)s::timestamptz, %(error)s, %(result_json)s,
+                        %(attempts)s, %(max_attempts)s, %(next_attempt_at)s::timestamptz,
+                        %(enqueue_version)s
+                    )
+                    ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+                    RETURNING id
+                    """,
+                    params,
+                )
+                inserted = cur.fetchone() is not None
+                if not inserted:
+                    cur.execute(self._SELECT + " WHERE idempotency_key=%s", (job.idempotency_key,))
+                    existing = cur.fetchone()
+                    if existing is None:
+                        raise RuntimeError("job idempotency conflict could not be resolved")
                     return self._row_to_job(existing)
-            cur.execute(
-                """
-                INSERT INTO jobs (
-                    id, type, payload_json, idempotency_key, status, created_at, started_at,
-                    finished_at, error, result_json, attempts, max_attempts, next_attempt_at,
-                    enqueue_version
+
+            if not job.idempotency_key:
+                cur.execute(
+                    """
+                    INSERT INTO jobs (
+                        id, type, payload_json, idempotency_key, status, created_at, started_at,
+                        finished_at, error, result_json, attempts, max_attempts, next_attempt_at,
+                        enqueue_version
+                    )
+                    VALUES (
+                        %(id)s, %(type)s, %(payload_json)s, %(idempotency_key)s, %(status)s,
+                        %(created_at)s::timestamptz, %(started_at)s::timestamptz,
+                        %(finished_at)s::timestamptz, %(error)s, %(result_json)s,
+                        %(attempts)s, %(max_attempts)s, %(next_attempt_at)s::timestamptz,
+                        %(enqueue_version)s
+                    )
+                    ON CONFLICT (id) DO UPDATE SET
+                        status=EXCLUDED.status,
+                        payload_json=EXCLUDED.payload_json,
+                        enqueue_version=EXCLUDED.enqueue_version,
+                        next_attempt_at=EXCLUDED.next_attempt_at
+                    """,
+                    params,
                 )
-                VALUES (
-                    %(id)s, %(type)s, %(payload_json)s, %(idempotency_key)s, %(status)s,
-                    %(created_at)s::timestamptz, %(started_at)s::timestamptz,
-                    %(finished_at)s::timestamptz, %(error)s, %(result_json)s,
-                    %(attempts)s, %(max_attempts)s, %(next_attempt_at)s::timestamptz,
-                    %(enqueue_version)s
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    status=EXCLUDED.status,
-                    payload_json=EXCLUDED.payload_json,
-                    enqueue_version=EXCLUDED.enqueue_version,
-                    next_attempt_at=EXCLUDED.next_attempt_at
-                """,
-                params,
-            )
+
             cur.execute(
                 """
                 INSERT INTO job_outbox (job_id, enqueue_version, created_at)
