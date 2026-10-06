@@ -9,6 +9,7 @@ from api.routes.jobs import router as jobs_router
 from api.routes.businesses import router as businesses_router
 from api.routes.intent import router as intent_router
 from api.routes.research import router as research_router
+from api.routes.measurements import router as measurements_router
 
 app=FastAPI(title="Rivalry",version="0.2.1")
 app.include_router(health_router)
@@ -20,3 +21,4 @@ app.include_router(jobs_router,prefix="/api/v1",dependencies=[Depends(require_ap
 app.include_router(businesses_router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
 app.include_router(intent_router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
 app.include_router(research_router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
+app.include_router(measurements_router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
