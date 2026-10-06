@@ -41,4 +41,6 @@ def detect_anomaly(current: float, baseline: list[float], *, z_threshold: float 
     mean = sum(baseline) / len(baseline)
     variance = sum((x - mean) ** 2 for x in baseline) / len(baseline)
     std = variance ** 0.5
-    return std > 0 and abs(current - mean) / std >= z_threshold
+    if std == 0:
+        return current != mean
+    return abs(current - mean) / std >= z_threshold
