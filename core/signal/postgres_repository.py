@@ -6,6 +6,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .models import Signal, SignalDirection, SignalKind
+from core.evidence.models import KnowledgeKind
 from .repository import SignalRepository
 
 
@@ -22,10 +23,10 @@ class PostgresSignalRepository(SignalRepository):
                 """INSERT INTO signals
                 (id,entity_id,definition_key,signal_kind,direction,current_value,reference_value,
                  delta,delta_pct,detected_at,observation_ids_json,measurement_ids_json,
-                 confidence,significance,rationale,freshness_minutes)
+                 confidence,significance,knowledge_kind,rationale,freshness_minutes)
                 VALUES (%(id)s,%(entity_id)s,%(definition_key)s,%(signal_kind)s,%(direction)s,
                         %(current_value)s,%(reference_value)s,%(delta)s,%(delta_pct)s,%(detected_at)s,
-                        %(observation_ids)s,%(measurement_ids)s,%(confidence)s,%(significance)s,
+                        %(observation_ids)s,%(measurement_ids)s,%(confidence)s,%(significance)s,%(knowledge_kind)s,
                         %(rationale)s,%(freshness_minutes)s)
                 ON CONFLICT (id) DO UPDATE SET current_value=EXCLUDED.current_value,
                 reference_value=EXCLUDED.reference_value,delta=EXCLUDED.delta,delta_pct=EXCLUDED.delta_pct,
@@ -34,7 +35,7 @@ class PostgresSignalRepository(SignalRepository):
                 significance=EXCLUDED.significance,rationale=EXCLUDED.rationale,
                 freshness_minutes=EXCLUDED.freshness_minutes""",
                 {**row, "observation_ids": Jsonb(row["observation_ids"]),
-                 "measurement_ids": Jsonb(row["measurement_ids"])},
+                 "measurement_ids": Jsonb(row["measurement_ids"]), "knowledge_kind": row["knowledge_kind"]},
             )
         return signal
 
@@ -43,7 +44,7 @@ class PostgresSignalRepository(SignalRepository):
             cur.execute(
                 """SELECT id,entity_id,definition_key,signal_kind,direction,current_value,
                 reference_value,delta,delta_pct,detected_at,observation_ids_json,
-                measurement_ids_json,confidence,significance,rationale,freshness_minutes
+                measurement_ids_json,confidence,significance,knowledge_kind,rationale,freshness_minutes
                 FROM signals WHERE id=%s""",
                 (signal_id,),
             )
@@ -56,6 +57,6 @@ class PostgresSignalRepository(SignalRepository):
             current_value=row[5], reference_value=row[6], delta=row[7],
             delta_pct=row[8], detected_at=row[9].isoformat() if hasattr(row[9], "isoformat") else row[9],
             observation_ids=list(row[10] or []), measurement_ids=list(row[11] or []),
-            confidence=row[12], significance=row[13], rationale=row[14] or "",
-            freshness_minutes=row[15],
+            confidence=row[12], significance=row[13], knowledge_kind=KnowledgeKind(row[14]),
+            rationale=row[15] or "", freshness_minutes=row[16],
         )
