@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from api.routes import businesses as businesses_route
+from api.routes import intent as intent_route
 from core.business.entity import BusinessEntity
 from core.business.repository import InMemoryBusinessRepository
 
@@ -20,6 +21,7 @@ def test_intent_plan_uses_business_context_before_asking():
         )
     )
     businesses_route.business_repository = repository
+    intent_route.business_repository = repository
     try:
         response = TestClient(app).post(
             "/api/v1/intent/plan",
@@ -27,6 +29,7 @@ def test_intent_plan_uses_business_context_before_asking():
         )
     finally:
         businesses_route.business_repository = original
+        intent_route.business_repository = original
 
     assert response.status_code == 200
     body = response.json()
@@ -39,6 +42,7 @@ def test_intent_plan_uses_business_context_before_asking():
 def test_intent_plan_requires_existing_business():
     original = businesses_route.business_repository
     businesses_route.business_repository = InMemoryBusinessRepository()
+    intent_route.business_repository = businesses_route.business_repository
     try:
         response = TestClient(app).post(
             "/api/v1/intent/plan",
