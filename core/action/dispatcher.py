@@ -3,6 +3,7 @@ from __future__ import annotations
 from core.decision.models import DecisionRecommendation
 
 from .models import ActionKind, RecommendationAction
+from .registry import ActionRegistry
 
 
 class ActionDispatcher:
@@ -12,13 +13,12 @@ class ActionDispatcher:
     never external business-side mutations.
     """
 
+    def __init__(self, registry: ActionRegistry | None = None) -> None:
+        self.registry = registry or ActionRegistry()
+
     def dispatch(self, recommendation: DecisionRecommendation) -> RecommendationAction:
-        normalized = recommendation.action.strip().lower()
-        kind = (
-            ActionKind.RESEARCH
-            if any(token in normalized for token in ("research", "investigate", "verify", "review"))
-            else ActionKind.ALERT
-        )
+        definition = self.registry.resolve(recommendation.action)
+        kind = ActionKind.RESEARCH if definition.route.value == ActionKind.RESEARCH else ActionKind.ALERT
         return RecommendationAction(
             recommendation_id=recommendation.impact_id,
             business_id=recommendation.business_id,
@@ -31,4 +31,5 @@ class ActionDispatcher:
             signal_id=recommendation.signal_id,
             factor_key=recommendation.factor_key,
             policy_id=recommendation.policy_id,
+            follow_up_job=definition.follow_up_job,
         )
