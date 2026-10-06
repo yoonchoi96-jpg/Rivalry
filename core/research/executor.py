@@ -114,4 +114,4 @@ class ResearchExecutor:
                 }
             except Exception as exc:
                 errors.append(f"{source.id}: {exc}")
-        raise RuntimeError(f"All research sources failed for {task.factor_key}: {'; '.join(errors)}')
+        raise RuntimeError(f"All research sources failed for {task.factor_key}: {'; '.join(errors)}")
