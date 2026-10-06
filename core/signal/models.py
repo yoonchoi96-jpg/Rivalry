@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
+
 from pydantic import BaseModel, Field
+
+from core.evidence.models import KnowledgeKind
 
 
 class SignalKind(StrEnum):
@@ -32,5 +35,6 @@ class Signal(BaseModel):
     measurement_ids: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0, le=1)
     significance: float = Field(default=0.5, ge=0, le=1)
+    knowledge_kind: KnowledgeKind = KnowledgeKind.ESTIMATE
     rationale: str = ""
     freshness_minutes: int | None = Field(default=None, ge=0)
