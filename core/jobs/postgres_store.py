@@ -155,10 +155,17 @@ class PostgresJobStore(JobStore):
     def pending_outbox(self, limit: int = 100) -> list[Job]:
         with self._connect(self.dsn) as conn, conn.cursor() as cur:
             cur.execute(
-                self._SELECT.replace("FROM jobs", "FROM job_outbox o JOIN jobs j ON j.id=o.job_id") +
-                " WHERE o.published_at IS NULL "
-                "AND (j.next_attempt_at IS NULL OR j.next_attempt_at <= NOW()) "
-                "ORDER BY o.created_at ASC LIMIT %s",
+                """
+                SELECT j.id, j.type, j.payload_json, j.idempotency_key, j.status,
+                       j.created_at, j.started_at, j.finished_at, j.error, j.result_json,
+                       j.attempts, j.max_attempts, j.next_attempt_at, j.enqueue_version
+                FROM job_outbox o
+                JOIN jobs j ON j.id = o.job_id
+                WHERE o.published_at IS NULL
+                  AND (j.next_attempt_at IS NULL OR j.next_attempt_at <= NOW())
+                ORDER BY o.created_at ASC
+                LIMIT %s
+                """,
                 (limit,),
             )
             rows = cur.fetchall()
