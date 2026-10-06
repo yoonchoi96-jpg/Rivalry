@@ -156,6 +156,7 @@ def test_ingest_research_persists_observation_lineage():
                             "statement": "Observed competitor price",
                             "captured_at": "2026-10-07T00:00:00Z",
                             "confidence": 0.9,
+                            "observation": {"normalized_value": 12000, "unit": "KRW", "currency": "KRW", "raw_value": "₩12,000"},
                         },
                     }],
                 },
@@ -167,3 +168,6 @@ def test_ingest_research_persists_observation_lineage():
     assert saved is not None
     assert saved.evidence_id == "ev-1"
     assert saved.entity_id == "b-research"
+    assert saved.normalized_value == 12000
+    assert saved.unit == "KRW"
+    assert saved.currency == "KRW"
