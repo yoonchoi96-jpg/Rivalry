@@ -13,12 +13,17 @@ def score_impact_relevance(
     if profile:
         relevance = profile.factor_weights.get(impact.factor_key, relevance)
     impact_score = score_impact(impact)
-    priority = rank_relevance(relevance=relevance, impact=impact_score, confidence=impact.confidence)
+    confidence_adjusted_impact = impact_score * impact.confidence
+    priority = rank_relevance(
+        relevance=relevance,
+        impact=confidence_adjusted_impact,
+        confidence=impact.confidence,
+    )
     return RelevanceScore(
         business_id=impact.business_id,
         item_id=impact.id,
         relevance=relevance,
-        impact=impact_score,
+        impact=confidence_adjusted_impact,
         confidence=impact.confidence,
         priority=priority,
     )
