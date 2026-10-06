@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS signals (
     measurement_ids_json JSONB NOT NULL DEFAULT '[]',
     confidence DOUBLE PRECISION NOT NULL DEFAULT 0.5,
     significance DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+    knowledge_kind TEXT NOT NULL DEFAULT 'estimate',
     rationale TEXT NOT NULL DEFAULT '',
     freshness_minutes INTEGER
 );
-
 CREATE INDEX IF NOT EXISTS idx_signals_entity_definition_detected
     ON signals (entity_id, definition_key, detected_at DESC);
 CREATE INDEX IF NOT EXISTS idx_signals_significance_detected
