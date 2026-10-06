@@ -138,6 +138,37 @@ def test_dispatch_action_persists_recommendation_alert():
     assert handlers.store.alerts[-1]["follow_up_job"] is None
 
 
+def test_dispatch_action_alert_identity_preserves_action_revision():
+    handlers, _ = make_handlers()
+    generated = handlers.generate_decision(
+        Job(
+            type=JobType.GENERATE_DECISION,
+            payload={"impact_id": "i-job", "policy_id": "policy-job-v1"},
+        )
+    )
+    handlers.dispatch_action(
+        Job(
+            type=JobType.DISPATCH_ACTION,
+            payload={"recommendation": generated["recommendation"]},
+        )
+    )
+
+    revised = dict(generated["recommendation"])
+    revised["action"] = "monitor"
+    handlers.dispatch_action(
+        Job(
+            type=JobType.DISPATCH_ACTION,
+            payload={"recommendation": revised},
+        )
+    )
+
+    alerts = handlers.store.alerts
+    assert len(alerts) == 2
+    assert alerts[0]["id"] != alerts[1]["id"]
+    assert alerts[0]["recommended_action"] == "review"
+    assert alerts[1]["recommended_action"] == "monitor"
+
+
 def test_ingest_research_persists_observation_lineage():
     observations = InMemoryObservationRepository()
     handlers = JobHandlers(observation_repository=observations)
