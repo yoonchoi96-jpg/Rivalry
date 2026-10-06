@@ -138,6 +138,20 @@ def test_dispatch_action_persists_recommendation_alert():
     assert handlers.store.alerts[-1]["follow_up_job"] is None
 
 
+def test_dispatch_action_is_idempotent_for_same_recommendation_revision():
+    handlers, _ = make_handlers()
+    generated = handlers.generate_decision(
+        Job(type=JobType.GENERATE_DECISION, payload={"impact_id": "i-job", "policy_id": "policy-job-v1"})
+    )
+    action_job = Job(
+        type=JobType.DISPATCH_ACTION,
+        payload={"recommendation": generated["recommendation"]},
+    )
+    handlers.dispatch_action(action_job)
+    handlers.dispatch_action(action_job)
+    assert len(handlers.store.alerts) == 1
+
+
 def test_dispatch_action_alert_identity_preserves_action_revision():
     handlers, _ = make_handlers()
     generated = handlers.generate_decision(
