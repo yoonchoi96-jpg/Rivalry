@@ -59,6 +59,22 @@ class OpenFoodFactsAdapter(PlatformAdapter):
             })
         return normalized
 
+    def research(self, task, source):
+        if task.factor_key not in {"product", "products", "competitor_product"}:
+            raise ValueError(f"Open Food Facts adapter does not support factor: {task.factor_key}")
+        products = self.get_products(task.parameters)
+        if not products:
+            raise ValueError("Open Food Facts returned no products")
+        first = products[0]
+        return {
+            "statement": (
+                f"{first['name'] or first['id']} is listed by "
+                f"{first['brand'] or 'an unspecified brand'} in Open Food Facts"
+            ),
+            "url": first["source_url"],
+            "metadata": {"product_count": len(products), "products": products},
+        }
+
     def discover_competitors(self, business: dict[str, object]) -> list[dict[str, object]]:
         return []
 
