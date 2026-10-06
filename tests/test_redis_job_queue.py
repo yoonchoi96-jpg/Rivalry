@@ -209,3 +209,19 @@ def test_stale_stream_delivery_is_acknowledged_after_delayed_requeue(monkeypatch
     assert promoted.id == job.id
     assert len(redis.acked) == 1
     assert redis.acked[0][2] == stale_entry[0]
+
+def test_enqueue_does_not_require_redis_idempotency_claim_before_durable_prepare():
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+
+    def fail_set(*_args, **_kwargs):
+        raise AssertionError("Redis SET must not be required before durable enqueue")
+
+    redis.set = fail_set
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+
+    job = queue.enqueue(Job(type=JobType.BUILD_ALERT, idempotency_key="crash-safe-123"))
+
+    assert store.get(job.id) is not None
+    assert len(redis.stream) == 1
+
