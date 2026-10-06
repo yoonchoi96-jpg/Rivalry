@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import socket
 
+from core.business.postgres_repository import PostgresBusinessRepository
+from core.business.repository import InMemoryBusinessRepository
 from core.intelligence.engine import IntelligenceStore
 from core.intelligence.postgres_repository import PostgresIntelligenceRepository
 from engines.competitor.repository import InMemoryCompetitorRepository, PostgresCompetitorRepository
@@ -43,6 +45,11 @@ def _build_job_queue(*, job_store: JobStore):
     return InMemoryJobQueue()
 
 
+def _build_business_repository():
+    dsn = os.getenv("RIVALRY_DATABASE_URL", "").strip()
+    return PostgresBusinessRepository(dsn) if dsn else InMemoryBusinessRepository()
+
+
 def _build_competitor_service() -> CompetitorService:
     dsn = os.getenv("RIVALRY_DATABASE_URL", "").strip()
     repository = PostgresCompetitorRepository(dsn) if dsn else InMemoryCompetitorRepository()
@@ -54,4 +61,5 @@ job_queue = _build_job_queue(job_store=job_store)
 intelligence_store = _build_intelligence_store()
 
 
+business_repository = _build_business_repository()
 competitor_service = _build_competitor_service()
