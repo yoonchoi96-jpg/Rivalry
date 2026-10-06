@@ -18,6 +18,8 @@ from core.decision.models import DecisionPolicy, DecisionRecommendation
 from core.decision.recommendation_repository import InMemoryDecisionRecommendationRepository
 from core.impact.repository import InMemoryImpactRepository
 from core.action.dispatcher import ActionDispatcher
+from core.measurement.engine import MeasurementEngine
+from core.measurement.registry import MeasurementRegistry
 from core.evidence.models import AccessMethod, KnowledgeKind
 from core.observation.models import Observation
 from hashlib import sha256
@@ -209,6 +211,34 @@ class JobHandlers:
             observations.append(observation.model_dump(mode="json"))
         return {"observations": observations, "observation_count": len(observations)}
 
+    def reprocess_observation(self, job: Job) -> dict[str, object]:
+        if self.observation_repository is None:
+            raise RuntimeError("observation repository is not configured")
+        raw = job.payload.get("observation")
+        if not isinstance(raw, dict):
+            raise ValueError("reprocess_observation requires payload.observation")
+        current = Observation.model_validate(raw)
+        if current.normalized_value is None:
+            return {"measurement": None, "signal": None, "reason": "observation has no normalized value"}
+        reference = self.observation_repository.latest_for_entity_metric(
+            current.entity_id, current.metric, exclude_id=current.id
+        )
+        if reference is None or reference.normalized_value is None:
+            return {"measurement": None, "signal": None, "reason": "no comparable reference observation"}
+        definition_key = current.provenance.get("measurement_definition") if isinstance(current.provenance, dict) else None
+        definition_key = str(definition_key or current.metric)
+        measurement, signal = MeasurementEngine(MeasurementRegistry()).measure_change(
+            definition_key, current, reference
+        )
+        if self.signal_repository is None:
+            raise RuntimeError("signal repository is not configured")
+        self.signal_repository.save(signal)
+        return {
+            "measurement": measurement.model_dump(mode="json"),
+            "signal": signal.model_dump(mode="json"),
+            "reference_observation_id": reference.id,
+        }
+
     def execute_research(self, job: Job) -> dict[str, object]:
         if self.research is None:
             raise RuntimeError("research executor is not configured")
@@ -219,4 +249,4 @@ class JobHandlers:
         return self.research.execute(ResearchPlan.model_validate(plan))
 
     def registry(self) -> dict[JobType, Any]:
-        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.INGEST_RESEARCH: self.ingest_research, JobType.GENERATE_DECISION: self.generate_decision, JobType.DISPATCH_ACTION: self.dispatch_action}
+        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.INGEST_RESEARCH: self.ingest_research, JobType.REPROCESS_OBSERVATION: self.reprocess_observation, JobType.GENERATE_DECISION: self.generate_decision, JobType.DISPATCH_ACTION: self.dispatch_action}
