@@ -1,29 +1,50 @@
-name: CI
+name: Rivalry CI
+
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
+
 permissions:
   contents: read
+
+concurrency:
+  group: rivalry-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[test]"
-      - run: pytest -q
+      - name: Install test dependencies
+        run: pip install -e ".[test]"
+      - name: Run tests
+        run: pytest -q
+
   quality:
+    name: Quality
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff
-      - run: ruff check . --select E9,F63,F7,F82
-      - run: python -m compileall -q api core engines adapters db worker.py
+      - name: Install Ruff
+        run: pip install ruff
+      - name: Ruff
+        run: ruff check . --select E9,F63,F7,F82
+      - name: Compile
+        run: python -m compileall -q api core engines adapters db worker.py
