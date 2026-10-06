@@ -45,6 +45,6 @@ def build_source_route_plan(
     for source in sources:
         score, rationale = _score(source, request)
         if score > 0:
-            routes.append(SourceRoute(source_id=source.id, score=score, rationale=rationale))
+            routes.append(SourceRoute(source_id=source.id, kind=source.kind, score=score, rationale=rationale))
     routes.sort(key=lambda route: route.score, reverse=True)
     return SourceRoutePlan(request=request, routes=routes)
