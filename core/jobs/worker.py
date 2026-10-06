@@ -47,6 +47,14 @@ class JobWorker:
                     payload={"competitor_id": competitor["id"], "changes": changes},
                 ))
             return jobs
+        if job.type == JobType.GENERATE_DECISION:
+            recommendation = job.result.get("recommendation")
+            if isinstance(recommendation, dict):
+                return [Job(
+                    type=JobType.DISPATCH_ACTION,
+                    payload={"recommendation": recommendation},
+                    idempotency_key=f"action:{recommendation.get("impact_id", job.id)}",
+                )]
         if job.type == JobType.PROCESS_INTELLIGENCE:
             change = job.payload.get("change")
             if isinstance(change, dict):
