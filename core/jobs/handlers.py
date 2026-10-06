@@ -17,6 +17,8 @@ from core.decision.engine import DecisionEngine
 from core.decision.models import DecisionPolicy, DecisionRecommendation
 from core.decision.recommendation_repository import InMemoryDecisionRecommendationRepository
 from core.impact.repository import InMemoryImpactRepository
+from core.action.dispatcher import ActionDispatcher
+from core.decision.models import DecisionRecommendation
 
 from .models import Job, JobType
 from .pipeline import detect_changes, normalize_collection
@@ -140,6 +142,30 @@ class JobHandlers:
         stored = self.decision_recommendations.save(recommendation)
         return {"recommendation": stored.model_dump(mode="json")}
 
+    def dispatch_action(self, job: Job) -> dict[str, object]:
+        raw = job.payload.get("recommendation")
+        if not isinstance(raw, dict):
+            raise ValueError("dispatch_action requires payload.recommendation")
+        recommendation = DecisionRecommendation.model_validate(raw)
+        action = ActionDispatcher().dispatch(recommendation)
+        alert = {
+            "id": f"recommendation:{recommendation.impact_id}",
+            "change_id": recommendation.impact_id,
+            "competitor_id": recommendation.business_id,
+            "type": "DECISION_RECOMMENDATION",
+            "impact_score": recommendation.priority * 100,
+            "confidence": recommendation.confidence * 100,
+            "summary": recommendation.rationale,
+            "likely_cause": recommendation.factor_key,
+            "recommended_action": recommendation.action,
+            "action_kind": action.kind.value,
+            "recommendation_id": action.recommendation_id,
+            "signal_id": action.signal_id,
+            "policy_id": action.policy_id,
+        }
+        self.store.record_alert(alert)
+        return {"action": action.model_dump(mode="json"), "alert": alert}
+
     def execute_research(self, job: Job) -> dict[str, object]:
         if self.research is None:
             raise RuntimeError("research executor is not configured")
@@ -150,4 +176,4 @@ class JobHandlers:
         return self.research.execute(ResearchPlan.model_validate(plan))
 
     def registry(self) -> dict[JobType, Any]:
-        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.GENERATE_DECISION: self.generate_decision}
+        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.GENERATE_DECISION: self.generate_decision, JobType.DISPATCH_ACTION: self.dispatch_action}
