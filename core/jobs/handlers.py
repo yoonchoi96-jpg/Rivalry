@@ -13,6 +13,10 @@ from engines.review.models import Review
 from engines.review.service import ReviewIntelligenceService
 from core.intelligence.engine import IntelligenceStore
 from core.research.executor import ResearchExecutor
+from core.decision.engine import DecisionEngine
+from core.decision.models import DecisionPolicy, DecisionRecommendation
+from core.decision.recommendation_repository import InMemoryDecisionRecommendationRepository
+from core.impact.repository import InMemoryImpactRepository
 
 from .models import Job, JobType
 from .pipeline import detect_changes, normalize_collection
@@ -31,6 +35,9 @@ class JobHandlers:
         self.reviews = reviews or ReviewIntelligenceService()
         self.store = store or IntelligenceStore()
         self.research = research
+        self.impact_repository = impact_repository or InMemoryImpactRepository()
+        self.decision_policies = decision_policies
+        self.decision_recommendations = decision_recommendations or InMemoryDecisionRecommendationRepository()
 
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
@@ -108,6 +115,32 @@ class JobHandlers:
         self.store.record_prediction(prediction)
         return {"prediction": prediction.model_dump(mode="json")}
 
+    def generate_decision(self, job: Job) -> dict[str, object]:
+        impact_id = job.payload.get("impact_id")
+        policy_id = job.payload.get("policy_id")
+        if not isinstance(impact_id, str) or not impact_id:
+            raise ValueError("generate_decision requires payload.impact_id")
+        if not isinstance(policy_id, str) or not policy_id:
+            raise ValueError("generate_decision requires payload.policy_id")
+        if self.decision_policies is None:
+            raise RuntimeError("decision policy registry is not configured")
+        impact = self.impact_repository.get(impact_id)
+        if impact is None:
+            raise ValueError(f"business impact not found: {impact_id}")
+        policy = self.decision_policies.get(policy_id)
+        if policy is None:
+            raise ValueError(f"decision policy not found: {policy_id}")
+        signal_repository = job.payload.get("_signal_repository")
+        if signal_repository is not None:
+            raise ValueError("generate_decision does not accept injected repositories")
+        from core.jobs.runtime import signal_repository as runtime_signal_repository
+        signal = runtime_signal_repository.get(impact.signal_id)
+        if signal is None:
+            raise ValueError(f"signal not found: {impact.signal_id}")
+        recommendation = DecisionEngine().recommend(impact, signal, policy)
+        stored = self.decision_recommendations.save(recommendation)
+        return {"recommendation": stored.model_dump(mode="json")}
+
     def execute_research(self, job: Job) -> dict[str, object]:
         if self.research is None:
             raise RuntimeError("research executor is not configured")
@@ -118,4 +151,4 @@ class JobHandlers:
         return self.research.execute(ResearchPlan.model_validate(plan))
 
     def registry(self) -> dict[JobType, Any]:
-        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research}
+        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.GENERATE_DECISION: self.generate_decision}
