@@ -49,6 +49,7 @@ def test_decision_engine_uses_declarative_policy_and_preserves_lineage():
         make_impact(),
         make_signal(),
         DecisionPolicy(
+            id="test-v1",
             name="test",
             default_action="monitor",
             default_rationale="keep observing",
@@ -70,6 +71,7 @@ def test_decision_engine_uses_declarative_policy_and_preserves_lineage():
     assert recommendation.signal_id == "s1"
     assert recommendation.factor_key == "competitive_price"
     assert recommendation.priority > 0
+    assert recommendation.policy_id == "test-v1"
 
 
 def test_decision_engine_rejects_broken_lineage():
@@ -80,6 +82,7 @@ def test_decision_engine_rejects_broken_lineage():
             impact,
             make_signal(),
             DecisionPolicy(
+                id="test-v1",
                 name="test",
                 default_action="monitor",
                 default_rationale="keep observing",
