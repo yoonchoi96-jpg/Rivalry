@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from hashlib import sha256
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -37,7 +38,13 @@ class ResearchExecutor:
 
     @staticmethod
     def _access_method(kind: str) -> AccessMethod:
-        return AccessMethod(kind) if kind in {item.value for item in AccessMethod} else AccessMethod.WEB
+        return {
+            "api": AccessMethod.API,
+            "web": AccessMethod.WEB,
+            "connected_source": AccessMethod.CONNECTED_SOURCE,
+            "internal_data": AccessMethod.INTERNAL,
+            "user_question": AccessMethod.USER,
+        }.get(kind, AccessMethod.WEB)
 
     def execute(self, plan: ResearchPlan) -> dict[str, object]:
         results: list[dict[str, object]] = []
