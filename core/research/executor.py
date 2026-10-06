@@ -4,7 +4,6 @@ from collections.abc import Callable
 from hashlib import sha256
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
 
 from core.evidence.models import AccessMethod, Evidence, EvidenceSource, KnowledgeKind
 from core.evidence.repository import EvidenceRepository
