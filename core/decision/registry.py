@@ -11,6 +11,7 @@ class DecisionPolicyRegistry:
         if not policy_id.strip():
             raise ValueError("policy_id must not be empty")
         stored = DecisionPolicy.model_validate(policy.model_dump(mode="json"))
+        stored.id = policy_id
         self._policies[policy_id] = stored
         return DecisionPolicy.model_validate(stored.model_dump(mode="json"))
 
