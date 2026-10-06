@@ -28,9 +28,3 @@ class InMemoryObservationRepository:
         if not candidates:
             return None
         return Observation.model_validate(max(candidates, key=lambda x: x.observed_at).model_dump(mode="json"))
-
-    def latest_for_entity_metric(self, entity_id: str, metric: str, *, exclude_id: str | None = None) -> Observation | None:
-        candidates = [item for item in self._items.values() if item.entity_id == entity_id and item.metric == metric and item.id != exclude_id]
-        if not candidates:
-            return None
-        return Observation.model_validate(max(candidates, key=lambda item: item.observed_at).model_dump(mode="json"))
