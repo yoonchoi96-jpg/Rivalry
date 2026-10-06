@@ -36,6 +36,7 @@ class SourceRequest(BaseModel):
 
 class SourceRoute(BaseModel):
     source_id: str
+    kind: SourceKind
     score: float = Field(ge=0, le=1)
     rationale: list[str] = Field(default_factory=list)
 
