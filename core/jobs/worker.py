@@ -122,7 +122,6 @@ class JobWorker:
         job.next_attempt_at = (
             datetime.now(timezone.utc) + timedelta(seconds=delay)
         ).isoformat()
-        self.queue.update(job)
         requeue = getattr(self.queue, "requeue", None)
         if callable(requeue):
             try:
@@ -130,6 +129,7 @@ class JobWorker:
             except TypeError:
                 requeue(job)
         else:
+            self.queue.update(job)
             self.queue.enqueue(job)
 
     def run_once(self) -> Job | None:
