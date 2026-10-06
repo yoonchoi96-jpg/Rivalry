@@ -110,7 +110,8 @@ class PostgresJobStore(JobStore):
                     existing = cur.fetchone()
                     if existing is None:
                         raise RuntimeError("job idempotency conflict could not be resolved")
-                    return self._row_to_job(existing)
+                    if existing[0] != job.id:
+                        return self._row_to_job(existing)
 
             if not job.idempotency_key:
                 cur.execute(
