@@ -33,18 +33,27 @@ class JobWorker:
             if not isinstance(changes, list):
                 return []
             jobs = [
-                Job(type=JobType.PROCESS_INTELLIGENCE, payload={"change": change})
-                for change in changes
+                Job(
+                    type=JobType.PROCESS_INTELLIGENCE,
+                    payload={"change": change},
+                    idempotency_key=f"process-intelligence:{job.id}:{index}",
+                )
+                for index, change in enumerate(changes)
                 if isinstance(change, dict)
             ]
             reviews = job.result.get("reviews", [])
             competitor = job.result.get("competitor", {})
             if isinstance(reviews, list) and reviews and isinstance(competitor, dict):
-                jobs.append(Job(type=JobType.ANALYZE_REVIEWS, payload={"reviews": reviews, "days": 3}))
+                jobs.append(Job(
+                    type=JobType.ANALYZE_REVIEWS,
+                    payload={"reviews": reviews, "days": 3},
+                    idempotency_key=f"analyze-reviews:{job.id}",
+                ))
             if changes and isinstance(competitor, dict) and competitor.get("id"):
                 jobs.append(Job(
                     type=JobType.GENERATE_PREDICTION,
                     payload={"competitor_id": competitor["id"], "changes": changes},
+                    idempotency_key=f"generate-prediction:{job.id}",
                 ))
             return jobs
         if job.type == JobType.GENERATE_DECISION:
@@ -87,6 +96,7 @@ class JobWorker:
                 return [Job(
                     type=JobType.BUILD_ALERT,
                     payload={"change": change, "intelligence": job.result},
+                    idempotency_key=f"build-alert:{job.id}",
                 )]
         return []
 
