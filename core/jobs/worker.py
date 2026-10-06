@@ -74,7 +74,7 @@ class JobWorker:
             )]
         if job.type == JobType.INGEST_RESEARCH:
             observations = job.result.get("observations", [])
-            return [Job(type=JobType.REPROCESS_OBSERVATION, payload={"observation": item, "business_id": job.payload.get("business_id"), "policy_id": job.payload.get("policy_id"), "exposure": job.payload.get("exposure", 0.5)}) for item in observations if isinstance(item, dict)]
+            return [Job(type=JobType.REPROCESS_OBSERVATION, payload={"observation": item, "business_id": job.payload.get("business_id"), "policy_id": job.payload.get("policy_id"), "exposure": job.payload.get("exposure", 0.5)}, idempotency_key=f"reprocess:{item.get('id', job.id)}:{job.payload.get('policy_id', 'default')}") for item in observations if isinstance(item, dict)]
         if job.type == JobType.REPROCESS_OBSERVATION:
             impact = job.result.get("impact")
             policy_id = job.result.get("policy_id")
