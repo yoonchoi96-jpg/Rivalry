@@ -69,7 +69,7 @@ class JobWorker:
         if job.type == JobType.EXECUTE_RESEARCH:
             return [Job(
                 type=JobType.INGEST_RESEARCH,
-                payload={"research": job.result, "business_id": job.payload.get("business_id")},
+                payload={"research": job.result, "business_id": job.payload.get("business_id"), "policy_id": job.payload.get("policy_id"), "exposure": job.payload.get("exposure", 0.5)},
                 idempotency_key=f"ingest-research:{job.id}",
             )]
         if job.type == JobType.INGEST_RESEARCH:
