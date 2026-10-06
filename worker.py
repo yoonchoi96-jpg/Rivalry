@@ -4,6 +4,7 @@ from core.jobs.runtime import (
     decision_recommendation_repository,
     evidence_repository,
     observation_repository,
+    measurement_repository,
     impact_repository,
     intelligence_store,
     job_queue,
