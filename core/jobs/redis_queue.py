@@ -92,18 +92,13 @@ class RedisJobQueue:
         return published
 
     def enqueue(self, job: Job) -> Job:
+        # PostgreSQL/InMemory job state is the idempotency authority. Do not
+        # claim a Redis-only marker before durable preparation: a crash in
+        # that gap could permanently suppress the job from the outbox.
         if job.idempotency_key:
             existing = self.job_store.get_by_idempotency_key(job.idempotency_key)
-            if existing is not None:
+            if existing is not None and existing.id != job.id:
                 return existing
-            claimed = self.client.set(
-                f"{self.idempotency_prefix}{job.idempotency_key}",
-                job.id,
-                nx=True,
-            )
-            if not claimed:
-                return self.job_store.get_by_idempotency_key(job.idempotency_key) or job
-
         return self._enqueue_existing(job)
 
     def _decode_entry(self, entry: tuple[str, dict[str, str]]) -> Job | None:
