@@ -1,4 +1,5 @@
 from __future__ import annotations
+from core.decision.models import DecisionRecommendation
 from core.evidence.models import Evidence
 from core.measurement.models import Measurement
 from core.observation.models import Observation
@@ -34,14 +35,23 @@ def validate_measurement(measurement: Measurement) -> QAResult:
 
 def validate_signal(signal: Signal) -> QAResult:
     issues=[]
-    if signal.signal_kind.value == "change" and signal.reference_value is None:
-        issues.append("change signal requires a reference value")
-    if signal.reference_value is not None and signal.delta is None:
-        issues.append("reference value requires delta")
-    if not signal.observation_ids and not signal.measurement_ids:
-        issues.append("signal has no observation or measurement lineage")
-    if signal.confidence < 0.5:
-        issues.append("signal confidence is below 0.5")
-    hard_fail = {"change signal requires a reference value", "reference value requires delta", "signal has no observation or measurement lineage"}
+    if signal.signal_kind.value == "change" and signal.reference_value is None: issues.append("change signal requires a reference value")
+    if signal.reference_value is not None and signal.delta is None: issues.append("reference value requires delta")
+    if not signal.observation_ids and not signal.measurement_ids: issues.append("signal has no observation or measurement lineage")
+    if signal.confidence < 0.5: issues.append("signal confidence is below 0.5")
+    hard_fail={"change signal requires a reference value","reference value requires delta","signal has no observation or measurement lineage"}
     status=QAStatus.FAIL if any(issue in hard_fail for issue in issues) else QAStatus.WARN if issues else QAStatus.PASS
     return QAResult(stage=QAStage.SIGNAL,status=status,score=max(0.0,1-0.25*len(issues)),checks=["reference","delta","lineage","confidence"],issues=issues,observation_ids=signal.observation_ids,measurement_ids=signal.measurement_ids)
+
+def validate_recommendation(recommendation: DecisionRecommendation) -> QAResult:
+    issues=[]
+    if not recommendation.business_id.strip(): issues.append("recommendation business_id is empty")
+    if not recommendation.impact_id.strip(): issues.append("recommendation impact_id is empty")
+    if not recommendation.signal_id.strip(): issues.append("recommendation signal_id is empty")
+    if not recommendation.factor_key.strip(): issues.append("recommendation factor_key is empty")
+    if not recommendation.action.strip(): issues.append("recommendation action is empty")
+    if not recommendation.rationale.strip(): issues.append("recommendation rationale is empty")
+    if recommendation.policy_id is None or not recommendation.policy_id.strip(): issues.append("recommendation policy_id is missing")
+    hard_fail={"recommendation business_id is empty","recommendation impact_id is empty","recommendation signal_id is empty","recommendation factor_key is empty","recommendation action is empty","recommendation policy_id is missing"}
+    status=QAStatus.FAIL if any(issue in hard_fail for issue in issues) else QAStatus.WARN if issues else QAStatus.PASS
+    return QAResult(stage=QAStage.RECOMMENDATION,status=status,score=max(0.0,1-0.2*len(issues)),checks=["business","impact","signal","factor","action","rationale","policy"],issues=issues)
