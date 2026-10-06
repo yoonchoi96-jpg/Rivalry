@@ -155,6 +155,10 @@ class JobHandlers:
             raise ValueError("dispatch_action requires payload.recommendation")
         recommendation = DecisionRecommendation.model_validate(raw)
         impact = self.impact_repository.get(recommendation.impact_id)
+        action = ActionDispatcher().dispatch(
+            recommendation,
+            exposure=impact.exposure if impact is not None else 0.5,
+        )
         alert = {
             "id": f"recommendation:{recommendation.impact_id}",
             "change_id": recommendation.impact_id,
