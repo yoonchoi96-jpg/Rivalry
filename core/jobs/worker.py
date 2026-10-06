@@ -66,6 +66,12 @@ class JobWorker:
                         payload=payload,
                         idempotency_key=f"followup:{action.get('recommendation_id', job.id)}:{follow_up_job}",
                     )]
+        if job.type == JobType.EXECUTE_RESEARCH:
+            return [Job(
+                type=JobType.INGEST_RESEARCH,
+                payload={"research": job.result, "business_id": job.payload.get("business_id")},
+                idempotency_key=f"ingest-research:{job.id}",
+            )]
         if job.type == JobType.PROCESS_INTELLIGENCE:
             change = job.payload.get("change")
             if isinstance(change, dict):
