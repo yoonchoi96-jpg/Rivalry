@@ -43,6 +43,14 @@ class ResearchExecutor:
     def execute(self, plan: ResearchPlan) -> dict[str, object]:
         return {"question": plan.question, "tasks": [self._execute_task(task) for task in plan.tasks]}
 
+    @staticmethod
+    def _observation_payload(task: ResearchTask, payload: dict[str, Any]) -> dict[str, object]:
+        raw = payload.get("observation")
+        if isinstance(raw, dict):
+            return dict(raw)
+        keys = ("normalized_value", "unit", "currency", "geography", "observed_at", "raw_value")
+        return {key: payload[key] for key in keys if key in payload}
+
     def _handler_for(self, source: SourceProfile) -> ResearchHandler | None:
         handler = self.handlers.get(source.id)
         if handler is not None:
@@ -105,7 +113,8 @@ class ResearchExecutor:
                     "factor_key": task.factor_key,
                     "source_id": source.id,
                     "method": source.kind.value,
-                    "evidence": {**saved.model_dump(mode="json"), "url": source_record.url, "metadata": source_record.metadata},
+                    "evidence": {**saved.model_dump(mode="json"), "url": source_record.url, "metadata": source_record.metadata,
+                                 "observation": self._observation_payload(task, payload)},
                     "url": source_record.url,
                     "qa": {
                         "source": source_qa.model_dump(mode="json"),
