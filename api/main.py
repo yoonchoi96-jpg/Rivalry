@@ -14,8 +14,9 @@ from api.routes.qa import router as qa_router
 from api.routes.signals import router as signals_router
 from api.routes.impact import router as impact_router
 from api.routes.relevance import router as relevance_router
+from api.routes.source import router as source_router
 
 app=FastAPI(title="Rivalry",version="0.2.1")
 app.include_router(health_router)
-for router in [competitors_router,changes_router,onboarding_router,ai_router,jobs_router,businesses_router,intent_router,research_router,measurements_router,qa_router,signals_router,impact_router,relevance_router]:
+for router in [competitors_router,changes_router,onboarding_router,ai_router,jobs_router,businesses_router,intent_router,research_router,measurements_router,qa_router,signals_router,impact_router,relevance_router,source_router]:
     app.include_router(router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
