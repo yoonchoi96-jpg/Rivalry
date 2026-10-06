@@ -35,3 +35,9 @@ def test_research_action_builds_executable_follow_up_plan():
     plan = action.follow_up_payload["plan"]
     assert plan["tasks"][0]["factor_key"] == "competitive_price"
     assert plan["tasks"][0]["method"] == "web"
+
+
+def test_unknown_action_defaults_to_safe_alert():
+    action = ActionDispatcher().dispatch(make_recommendation("change_packaging"))
+    assert action.kind == ActionKind.ALERT
+    assert action.follow_up_job is None
