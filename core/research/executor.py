@@ -101,9 +101,17 @@ class ResearchExecutor:
                 if evidence_qa.status == QAStatus.FAIL:
                     raise ValueError("evidence QA failed")
                 saved = self.evidence.save(evidence)
-                return {"factor_key": task.factor_key, "source_id": source.id, "method": source.kind.value,
-                        "evidence": saved.model_dump(mode="json"),
-                        "qa": {"source": source_qa.model_dump(mode="json"), "evidence": evidence_qa.model_dump(mode="json")}}
+                return {
+                    "factor_key": task.factor_key,
+                    "source_id": source.id,
+                    "method": source.kind.value,
+                    "evidence": saved.model_dump(mode="json"),
+                    "url": source_record.url,
+                    "qa": {
+                        "source": source_qa.model_dump(mode="json"),
+                        "evidence": evidence_qa.model_dump(mode="json"),
+                    },
+                }
             except Exception as exc:
                 errors.append(f"{source.id}: {exc}")
-        raise RuntimeError(f"All research sources failed for {task.factor_key}: {'; '.join(errors)}")
+        raise RuntimeError(f"All research sources failed for {task.factor_key}: {'; '.join(errors)}')
