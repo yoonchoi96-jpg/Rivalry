@@ -5,6 +5,7 @@ from core.impact.models import BusinessImpact
 from core.impact.repository import InMemoryImpactRepository
 from core.jobs.handlers import JobHandlers
 from core.jobs.models import Job, JobType
+from core.observation.repository import InMemoryObservationRepository
 from core.signal.models import Signal, SignalDirection, SignalKind
 from core.signal.repository import InMemorySignalRepository
 
@@ -135,3 +136,34 @@ def test_dispatch_action_persists_recommendation_alert():
     assert handlers.store.alerts[-1]["recommended_action"] == "review"
     assert handlers.store.alerts[-1]["impact_score"] == 50.0
     assert handlers.store.alerts[-1]["follow_up_job"] is None
+
+
+def test_ingest_research_persists_observation_lineage():
+    observations = InMemoryObservationRepository()
+    handlers = JobHandlers(observation_repository=observations)
+    result = handlers.ingest_research(
+        Job(
+            type=JobType.INGEST_RESEARCH,
+            payload={
+                "business_id": "b-research",
+                "research": {
+                    "question": "verify competitor price",
+                    "tasks": [{
+                        "factor_key": "competitive_price",
+                        "source_id": "web-source",
+                        "evidence": {
+                            "id": "ev-1",
+                            "statement": "Observed competitor price",
+                            "captured_at": "2026-10-07T00:00:00Z",
+                            "confidence": 0.9,
+                        },
+                    }],
+                },
+            },
+        )
+    )
+    assert result["observation_count"] == 1
+    saved = observations.get(result["observations"][0]["id"])
+    assert saved is not None
+    assert saved.evidence_id == "ev-1"
+    assert saved.entity_id == "b-research"
