@@ -33,6 +33,28 @@ def test_queue_deduplicates_idempotent_jobs():
     assert queue.size() == 1
 
 
+def test_in_memory_queue_requeues_failed_job():
+    queue = InMemoryJobQueue()
+    attempts = {"count": 0}
+
+    def handler(_):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise RuntimeError("transient")
+        return {"ok": True}
+
+    job = queue.enqueue(Job(type=JobType.PROCESS_INTELLIGENCE, max_attempts=2))
+    worker = JobWorker(queue, {JobType.PROCESS_INTELLIGENCE: handler}, retry_base_seconds=0)
+
+    first = worker.run_once()
+    assert first.status == JobStatus.QUEUED
+    assert queue.size() == 1
+
+    second = worker.run_once()
+    assert second.status == JobStatus.SUCCEEDED
+    assert second.result == {"ok": True}
+
+
 def test_worker_records_handler_failure():
     queue = InMemoryJobQueue()
     job = queue.enqueue(Job(type=JobType.PROCESS_INTELLIGENCE))
