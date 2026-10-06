@@ -30,7 +30,7 @@ class ActionDispatcher:
                         factor_key=recommendation.factor_key,
                         objective=f"검증: {recommendation.rationale}",
                         method=ResearchMethod.WEB,
-                        priority=recommendation.priority,
+                        priority=round(recommendation.priority * 100),
                         freshness_minutes=1440,
                     )
                 ],
