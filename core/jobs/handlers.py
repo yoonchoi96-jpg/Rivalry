@@ -171,6 +171,38 @@ class JobHandlers:
         self.store.record_alert(alert)
         return {"action": action.model_dump(mode="json"), "alert": alert}
 
+
+    def ingest_research(self, job: Job) -> dict[str, object]:
+        raw = job.payload.get("research")
+        if not isinstance(raw, dict):
+            raise ValueError("ingest_research requires payload.research")
+        observations = []
+        for item in raw.get("tasks", []):
+            if not isinstance(item, dict) or not isinstance(item.get("evidence"), dict):
+                continue
+            evidence = item["evidence"]
+            entity_id = str(job.payload.get("business_id") or "")
+            if not entity_id:
+                continue
+            observation = Observation(
+                id=sha256(str(evidence.get("id", "")).encode()).hexdigest()[:32],
+                entity_id=entity_id,
+                entity_type="business",
+                metric=str(item.get("factor_key") or "research_evidence"),
+                raw_value=evidence.get("statement"),
+                normalized_value=None,
+                observed_at=str(evidence.get("captured_at") or ""),
+                source_id=str(item.get("source_id") or evidence.get("source_id") or ""),
+                evidence_id=str(evidence.get("id") or ""),
+                access_method=AccessMethod.WEB,
+                confidence=float(evidence.get("confidence", 0.5)),
+                knowledge_kind=KnowledgeKind.FACT,
+                provenance={"research_question": raw.get("question")},
+            )
+            self.observation_repository.save(observation)
+            observations.append(observation.model_dump(mode="json"))
+        return {"observations": observations}
+
     def execute_research(self, job: Job) -> dict[str, object]:
         if self.research is None:
             raise RuntimeError("research executor is not configured")
