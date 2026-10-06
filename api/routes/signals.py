@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from core.jobs.runtime import signal_repository
 from core.signal.models import Signal
 from core.qa.engine import validate_signal
+from core.qa.models import QAResult
 
 router=APIRouter(prefix="/signals",tags=["signals"])
 
@@ -12,6 +13,6 @@ def create_signal(signal: Signal):
         raise HTTPException(status_code=400,detail=qa.issues)
     return signal_repository.save(signal)
 
-@router.post("/qa",response_model=object)
+@router.post("/qa",response_model=QAResult)
 def signal_qa(signal: Signal):
     return validate_signal(signal)
