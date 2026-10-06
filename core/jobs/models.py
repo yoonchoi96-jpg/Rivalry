@@ -10,7 +10,7 @@ class JobStatus(StrEnum):
 class JobType(StrEnum):
     COLLECT_COMPETITOR="collect_competitor"; PROCESS_INTELLIGENCE="process_intelligence"
     BUILD_ALERT="build_alert"; ANALYZE_REVIEWS="analyze_reviews"; GENERATE_PREDICTION="generate_prediction"
-    EXECUTE_RESEARCH="execute_research"; GENERATE_DECISION="generate_decision"
+    EXECUTE_RESEARCH="execute_research"; GENERATE_DECISION="generate_decision"; DISPATCH_ACTION="dispatch_action"
 
 class Job(BaseModel):
     id:str=Field(default_factory=lambda:str(uuid4()))
