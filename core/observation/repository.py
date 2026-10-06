@@ -9,6 +9,7 @@ class ObservationRepository(Protocol):
     def save(self, observation: Observation) -> Observation: ...
     def get(self, observation_id: str) -> Observation | None: ...
     def latest_for_entity_metric(self, entity_id: str, metric: str, *, exclude_id: str | None = None) -> Observation | None: ...
+    def latest_for_entity_metric(self, entity_id: str, metric: str, *, exclude_id: str | None = None) -> Observation | None: ...
 
 
 class InMemoryObservationRepository:
@@ -22,6 +23,12 @@ class InMemoryObservationRepository:
     def get(self, observation_id: str) -> Observation | None:
         item = self._items.get(observation_id)
         return None if item is None else Observation.model_validate(item.model_dump(mode="json"))
+
+    def latest_for_entity_metric(self, entity_id: str, metric: str, *, exclude_id: str | None = None) -> Observation | None:
+        candidates = [x for x in self._items.values() if x.entity_id == entity_id and x.metric == metric and x.id != exclude_id]
+        if not candidates:
+            return None
+        return Observation.model_validate(max(candidates, key=lambda x: x.observed_at).model_dump(mode="json"))
 
     def latest_for_entity_metric(self, entity_id: str, metric: str, *, exclude_id: str | None = None) -> Observation | None:
         candidates = [item for item in self._items.values() if item.entity_id == entity_id and item.metric == metric and item.id != exclude_id]
