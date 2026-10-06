@@ -13,6 +13,8 @@ from core.measurement.postgres_repository import PostgresMeasurementRepository
 from core.measurement.repository import InMemoryMeasurementRepository
 from core.observation.postgres_repository import PostgresObservationRepository
 from core.observation.repository import InMemoryObservationRepository
+from core.signal.postgres_repository import PostgresSignalRepository
+from core.signal.repository import InMemorySignalRepository
 from engines.competitor.repository import InMemoryCompetitorRepository, PostgresCompetitorRepository
 from engines.competitor.service import CompetitorService
 from .queue import InMemoryJobQueue
@@ -20,20 +22,16 @@ from .redis_queue import RedisJobQueue
 from .store import InMemoryJobStore, JobStore
 from .postgres_store import PostgresJobStore
 
-
 def _is_production() -> bool:
     return os.getenv("RIVALRY_ENV", "").strip().lower() in {"production", "prod"}
-
 
 def _build_intelligence_store() -> IntelligenceStore:
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     return IntelligenceStore(repository=PostgresIntelligenceRepository(dsn)) if dsn else IntelligenceStore()
 
-
 def _build_job_store() -> JobStore:
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     return PostgresJobStore(dsn) if dsn else InMemoryJobStore()
-
 
 def _build_job_queue(*, job_store: JobStore):
     redis_url=os.getenv("RIVALRY_REDIS_URL","").strip()
@@ -44,32 +42,30 @@ def _build_job_queue(*, job_store: JobStore):
         return RedisJobQueue(redis_url, job_store=job_store, consumer=f"{socket.gethostname()}-{os.getpid()}")
     return InMemoryJobQueue()
 
-
 def _build_business_repository():
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     return PostgresBusinessRepository(dsn) if dsn else InMemoryBusinessRepository()
-
 
 def _build_evidence_repository():
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     return PostgresEvidenceRepository(dsn) if dsn else InMemoryEvidenceRepository()
 
-
 def _build_observation_repository():
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     return PostgresObservationRepository(dsn) if dsn else InMemoryObservationRepository()
-
 
 def _build_measurement_repository():
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     return PostgresMeasurementRepository(dsn) if dsn else InMemoryMeasurementRepository()
 
+def _build_signal_repository():
+    dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
+    return PostgresSignalRepository(dsn) if dsn else InMemorySignalRepository()
 
 def _build_competitor_service() -> CompetitorService:
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     repository=PostgresCompetitorRepository(dsn) if dsn else InMemoryCompetitorRepository()
     return CompetitorService(repository=repository)
-
 
 job_store=_build_job_store()
 job_queue=_build_job_queue(job_store=job_store)
@@ -78,4 +74,5 @@ business_repository=_build_business_repository()
 evidence_repository=_build_evidence_repository()
 observation_repository=_build_observation_repository()
 measurement_repository=_build_measurement_repository()
+signal_repository=_build_signal_repository()
 competitor_service=_build_competitor_service()
