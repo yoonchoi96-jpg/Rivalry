@@ -160,7 +160,7 @@ class JobHandlers:
             exposure=impact.exposure if impact is not None else 0.5,
         )
         alert = {
-            "id": f"recommendation:{recommendation.impact_id}",
+            "id": f"recommendation:{recommendation.impact_id}:{recommendation.policy_id or 'none'}:{recommendation.action}",
             "change_id": recommendation.impact_id,
             "competitor_id": recommendation.business_id,
             "type": "DECISION_RECOMMENDATION",
