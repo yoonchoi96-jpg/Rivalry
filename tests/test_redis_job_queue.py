@@ -123,6 +123,20 @@ def test_redis_queue_deduplicates_idempotency_key():
     assert len(redis.stream) == 1
 
 
+def test_same_job_identity_is_idempotent_without_republishing():
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = Job(type=JobType.BUILD_ALERT, idempotency_key="same-id-123")
+
+    first = queue.enqueue(job)
+    second = queue.enqueue(job)
+
+    assert second.id == first.id
+    assert second.enqueue_version == first.enqueue_version
+    assert len(redis.stream) == 1
+
+
 def test_idempotent_job_immediate_requeue_is_enqueued_again():
     store = InMemoryJobStore()
     redis = FakeRedis()
