@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 from typing import Any
 
 from .models import Job, JobStatus
@@ -34,7 +33,6 @@ class RedisJobQueue:
         self.group = group
         self.consumer = consumer
         self.reclaim_after_ms = reclaim_after_ms
-        self.delayed_key = f"{stream}:delayed"
         self.dead_letter_stream = f"{stream}:dead-letter"
         self.idempotency_prefix = f"{stream}:idempotency:"
         self._message_ids: dict[str, str] = {}
@@ -116,17 +114,8 @@ class RedisJobQueue:
         self._message_ids[queued_job.id] = message_id
         return current_job or queued_job
 
-    def _promote_due(self) -> None:
-        now = time.time()
-        due = self.client.zrangebyscore(self.delayed_key, 0, now)
-        for raw in due:
-            job = Job.model_validate(json.loads(raw))
-            self.client.zrem(self.delayed_key, raw)
-            self._enqueue_existing(job)
-
     def dequeue(self) -> Job | None:
         self.reconcile_outbox()
-        self._promote_due()
 
         xautoclaim = getattr(self.client, "xautoclaim", None)
         if callable(xautoclaim):
@@ -231,8 +220,8 @@ class RedisJobQueue:
                 pending = int(summary.get("pending", 0))
             elif isinstance(summary, (tuple, list)) and summary:
                 pending = int(summary[0])
-        zcard = getattr(self.client, "zcard", None)
-        delayed = int(zcard(self.delayed_key)) if callable(zcard) else 0
+        scheduled = getattr(self.job_store, "count_scheduled", None)
+        delayed = int(scheduled()) if callable(scheduled) else 0
         return {
             "stream_total": int(self.client.xlen(self.stream)),
             "pending": pending,
