@@ -16,6 +16,7 @@ class SourceProfile(BaseModel):
     id: str
     name: str
     kind: SourceKind
+    adapter_id: str | None = None
     reliability: float = Field(default=0.5, ge=0, le=1)
     coverage: float = Field(default=0.5, ge=0, le=1)
     cost: float = Field(default=0.5, ge=0, le=1)
