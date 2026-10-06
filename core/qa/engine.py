@@ -42,5 +42,6 @@ def validate_signal(signal: Signal) -> QAResult:
         issues.append("signal has no observation or measurement lineage")
     if signal.confidence < 0.5:
         issues.append("signal confidence is below 0.5")
-    status=QAStatus.FAIL if any("requires" in x or "no observation" in x for x in issues) else QAStatus.WARN if issues else QAStatus.PASS
+    hard_fail = {"change signal requires a reference value", "reference value requires delta", "signal has no observation or measurement lineage"}
+    status=QAStatus.FAIL if any(issue in hard_fail for issue in issues) else QAStatus.WARN if issues else QAStatus.PASS
     return QAResult(stage=QAStage.SIGNAL,status=status,score=max(0.0,1-0.25*len(issues)),checks=["reference","delta","lineage","confidence"],issues=issues,observation_ids=signal.observation_ids,measurement_ids=signal.measurement_ids)
