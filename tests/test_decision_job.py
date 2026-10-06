@@ -129,7 +129,7 @@ def test_dispatch_action_persists_recommendation_alert():
         )
     )
 
-    assert result["action"]["kind"] == "research"
+    assert result["action"]["kind"] == "alert"
     assert result["alert"]["type"] == "DECISION_RECOMMENDATION"
     assert result["alert"]["recommendation_id"] == "i-job"
     assert handlers.store.alerts[-1]["recommended_action"] == "review"
