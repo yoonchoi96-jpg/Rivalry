@@ -7,6 +7,7 @@ from api.routes.onboarding import router as onboarding_router
 from api.routes.ai import router as ai_router
 from api.routes.jobs import router as jobs_router
 from api.routes.businesses import router as businesses_router
+from api.routes.intent import router as intent_router
 
 app=FastAPI(title="Rivalry",version="0.2.1")
 app.include_router(health_router)
@@ -16,3 +17,4 @@ app.include_router(onboarding_router,prefix="/api/v1",dependencies=[Depends(requ
 app.include_router(ai_router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
 app.include_router(jobs_router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
 app.include_router(businesses_router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
+app.include_router(intent_router,prefix="/api/v1",dependencies=[Depends(require_api_key)])
