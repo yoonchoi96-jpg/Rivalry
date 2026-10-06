@@ -154,7 +154,6 @@ class JobHandlers:
         if not isinstance(raw, dict):
             raise ValueError("dispatch_action requires payload.recommendation")
         recommendation = DecisionRecommendation.model_validate(raw)
-        action = ActionDispatcher().dispatch(recommendation)
         impact = self.impact_repository.get(recommendation.impact_id)
         alert = {
             "id": f"recommendation:{recommendation.impact_id}",
