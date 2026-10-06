@@ -12,6 +12,7 @@ class JobQueue(Protocol):
     def dequeue(self) -> Job | None: ...
     def get(self, job_id: str) -> Job | None: ...
     def update(self, job: Job) -> Job: ...
+    def requeue(self, job: Job, *, delay_seconds: float = 0) -> Job: ...
 
 
 class InMemoryJobQueue:
@@ -54,6 +55,12 @@ class InMemoryJobQueue:
             self._jobs[job.id] = job
             if job.idempotency_key:
                 self._idempotency[job.idempotency_key] = job.id
+            return job
+
+    def requeue(self, job: Job, *, delay_seconds: float = 0) -> Job:
+        with self._lock:
+            self._jobs[job.id] = job
+            self._pending.append(job.id)
             return job
 
     def size(self) -> int:
