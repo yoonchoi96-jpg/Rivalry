@@ -12,6 +12,7 @@ from engines.recommendation.service import RecommendationService
 from engines.review.models import Review
 from engines.review.service import ReviewIntelligenceService
 from core.intelligence.engine import IntelligenceStore
+from core.research.executor import ResearchExecutor
 
 from .models import Job, JobType
 from .pipeline import detect_changes, normalize_collection
@@ -20,7 +21,7 @@ from .pipeline import detect_changes, normalize_collection
 class JobHandlers:
     """Application handlers kept independent from the queue implementation."""
 
-    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None) -> None:
+    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None, research: ResearchExecutor | None = None) -> None:
         self.intelligence = intelligence or IntelligenceService()
         self.adapters = adapters or AdapterRegistry()
         if adapters is None:
@@ -29,6 +30,7 @@ class JobHandlers:
         self.recommendations = recommendations or RecommendationService()
         self.reviews = reviews or ReviewIntelligenceService()
         self.store = store or IntelligenceStore()
+        self.research = research
 
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
@@ -106,5 +108,14 @@ class JobHandlers:
         self.store.record_prediction(prediction)
         return {"prediction": prediction.model_dump(mode="json")}
 
+    def execute_research(self, job: Job) -> dict[str, object]:
+        if self.research is None:
+            raise RuntimeError("research executor is not configured")
+        plan = job.payload.get("plan")
+        if not isinstance(plan, dict):
+            raise ValueError("execute_research requires payload.plan")
+        from core.research.models import ResearchPlan
+        return self.research.execute(ResearchPlan.model_validate(plan))
+
     def registry(self) -> dict[JobType, Any]:
-        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction}
+        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research}
