@@ -20,6 +20,19 @@ def test_queue_preserves_job_lifecycle():
     assert queue.size() == 0
 
 
+def test_queue_deduplicates_idempotent_jobs():
+    queue = InMemoryJobQueue()
+    first = Job(type=JobType.DISPATCH_ACTION, idempotency_key="action:i1:p1:review")
+    second = Job(type=JobType.DISPATCH_ACTION, idempotency_key="action:i1:p1:review")
+
+    stored_first = queue.enqueue(first)
+    stored_second = queue.enqueue(second)
+
+    assert stored_second.id == stored_first.id
+    assert queue.get(second.id) is None
+    assert queue.size() == 1
+
+
 def test_worker_records_handler_failure():
     queue = InMemoryJobQueue()
     job = queue.enqueue(Job(type=JobType.PROCESS_INTELLIGENCE))
