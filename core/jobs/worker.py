@@ -55,6 +55,17 @@ class JobWorker:
                     payload={"recommendation": recommendation},
                     idempotency_key=f"action:{recommendation.get('impact_id', job.id)}:{recommendation.get('policy_id', 'default')}:{recommendation.get('action', 'unknown')}",
                 )]
+        if job.type == JobType.DISPATCH_ACTION:
+            action = job.result.get("action")
+            if isinstance(action, dict):
+                follow_up_job = action.get("follow_up_job")
+                payload = action.get("follow_up_payload")
+                if isinstance(follow_up_job, str) and isinstance(payload, dict):
+                    return [Job(
+                        type=JobType(follow_up_job),
+                        payload=payload,
+                        idempotency_key=f"followup:{action.get('recommendation_id', job.id)}:{follow_up_job}",
+                    )]
         if job.type == JobType.PROCESS_INTELLIGENCE:
             change = job.payload.get("change")
             if isinstance(change, dict):
