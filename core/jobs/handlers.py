@@ -19,7 +19,7 @@ from core.decision.recommendation_repository import InMemoryDecisionRecommendati
 from core.impact.repository import InMemoryImpactRepository
 from core.action.dispatcher import ActionDispatcher
 from core.measurement.engine import MeasurementEngine
-from core.measurement.registry import MeasurementRegistry
+from core.measurement.registry import MeasurementRegistry, DEFAULT_MEASUREMENTS
 from core.evidence.models import AccessMethod, KnowledgeKind
 from core.observation.models import Observation
 from hashlib import sha256
@@ -31,7 +31,7 @@ from .pipeline import detect_changes, normalize_collection
 class JobHandlers:
     """Application handlers kept independent from the queue implementation."""
 
-    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None, research: ResearchExecutor | None = None, impact_repository=None, decision_policies=None, decision_recommendations=None, signal_repository=None, observation_repository=None) -> None:
+    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None, research: ResearchExecutor | None = None, impact_repository=None, decision_policies=None, decision_recommendations=None, signal_repository=None, observation_repository=None, measurement_repository=None) -> None:
         self.intelligence = intelligence or IntelligenceService()
         self.adapters = adapters or AdapterRegistry()
         if adapters is None:
@@ -46,6 +46,7 @@ class JobHandlers:
         self.decision_recommendations = decision_recommendations or InMemoryDecisionRecommendationRepository()
         self.signal_repository = signal_repository
         self.observation_repository = observation_repository
+        self.measurement_repository = measurement_repository
 
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
@@ -227,12 +228,15 @@ class JobHandlers:
             return {"measurement": None, "signal": None, "reason": "no comparable reference observation"}
         definition_key = current.provenance.get("measurement_definition") if isinstance(current.provenance, dict) else None
         definition_key = str(definition_key or current.metric)
-        measurement, signal = MeasurementEngine(MeasurementRegistry()).measure_change(
+        measurement, signal = MeasurementEngine(MeasurementRegistry(DEFAULT_MEASUREMENTS)).measure_change(
             definition_key, current, reference
         )
         if self.signal_repository is None:
             raise RuntimeError("signal repository is not configured")
         self.signal_repository.save(signal)
+        measurement_repository = getattr(self, "measurement_repository", None)
+        if measurement_repository is not None:
+            measurement_repository.save(measurement)
         return {
             "measurement": measurement.model_dump(mode="json"),
             "signal": signal.model_dump(mode="json"),
