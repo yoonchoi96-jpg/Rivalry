@@ -50,5 +50,6 @@ def test_intent_plan_requires_existing_business():
         )
     finally:
         businesses_route.business_repository = original
+        intent_route.business_repository = original
 
     assert response.status_code == 404
