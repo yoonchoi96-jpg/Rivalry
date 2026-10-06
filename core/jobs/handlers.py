@@ -38,6 +38,7 @@ class JobHandlers:
         self.impact_repository = impact_repository or InMemoryImpactRepository()
         self.decision_policies = decision_policies
         self.decision_recommendations = decision_recommendations or InMemoryDecisionRecommendationRepository()
+        self.signal_repository = signal_repository
 
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
@@ -130,11 +131,9 @@ class JobHandlers:
         policy = self.decision_policies.get(policy_id)
         if policy is None:
             raise ValueError(f"decision policy not found: {policy_id}")
-        signal_repository = job.payload.get("_signal_repository")
-        if signal_repository is not None:
-            raise ValueError("generate_decision does not accept injected repositories")
-        from core.jobs.runtime import signal_repository as runtime_signal_repository
-        signal = runtime_signal_repository.get(impact.signal_id)
+        if self.signal_repository is None:
+            raise RuntimeError("signal repository is not configured")
+        signal = self.signal_repository.get(impact.signal_id)
         if signal is None:
             raise ValueError(f"signal not found: {impact.signal_id}")
         recommendation = DecisionEngine().recommend(impact, signal, policy)
