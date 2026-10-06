@@ -105,7 +105,7 @@ class ResearchExecutor:
                     "factor_key": task.factor_key,
                     "source_id": source.id,
                     "method": source.kind.value,
-                    "evidence": saved.model_dump(mode="json"),
+                    "evidence": {**saved.model_dump(mode="json"), "url": source_record.url},
                     "url": source_record.url,
                     "qa": {
                         "source": source_qa.model_dump(mode="json"),
