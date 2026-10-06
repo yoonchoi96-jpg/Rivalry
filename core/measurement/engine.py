@@ -35,7 +35,7 @@ class MeasurementEngine:
         if current.currency != reference.currency:
             raise ValueError("current and reference observations must share a currency")
 
-        value = current.normalized_value / reference.normalized_value - 1
+        value = round(current.normalized_value / reference.normalized_value - 1, 12)
         confidence = min(current.confidence, reference.confidence)
         measurement_id = sha256(
             f"{definition_key}:{current.id}:{reference.id}".encode("utf-8")
