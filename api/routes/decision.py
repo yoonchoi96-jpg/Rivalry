@@ -3,7 +3,11 @@ from fastapi import APIRouter, HTTPException
 from core.decision.engine import DecisionEngine
 from core.decision.models import DecisionPolicy, DecisionRecommendation
 from core.impact.models import BusinessImpact
-from core.jobs.runtime import decision_policy_registry, signal_repository
+from core.jobs.runtime import (
+    decision_policy_registry,
+    decision_recommendation_repository,
+    signal_repository,
+)
 
 router = APIRouter(prefix="/decision", tags=["decision"])
 
@@ -40,7 +44,8 @@ def recommend_with_policy(policy_id: str, impact: BusinessImpact):
         raise HTTPException(status_code=400, detail="signal not found")
 
     try:
-        return DecisionEngine().recommend(impact, signal, policy)
+        recommendation = DecisionEngine().recommend(impact, signal, policy)
+        return decision_recommendation_repository.save(recommendation)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -54,6 +59,12 @@ def recommend(impact: BusinessImpact, policy: DecisionPolicy):
         raise HTTPException(status_code=400, detail="signal not found")
 
     try:
-        return DecisionEngine().recommend(impact, signal, policy)
+        recommendation = DecisionEngine().recommend(impact, signal, policy)
+        return decision_recommendation_repository.save(recommendation)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/recommendations/{business_id}", response_model=list[DecisionRecommendation])
+def list_recommendations(business_id: str):
+    return decision_recommendation_repository.list_for_business(business_id)
