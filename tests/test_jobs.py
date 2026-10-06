@@ -55,6 +55,17 @@ def test_in_memory_queue_requeues_failed_job():
     assert second.result == {"ok": True}
 
 
+def test_in_memory_queue_honors_requeue_delay():
+    queue = InMemoryJobQueue()
+    job = queue.enqueue(Job(type=JobType.PROCESS_INTELLIGENCE))
+    queued = queue.dequeue()
+    assert queued is not None
+    queued.status = JobStatus.QUEUED
+    queue.requeue(queued, delay_seconds=60)
+    assert queue.dequeue() is None
+    assert queue.size() == 1
+
+
 def test_worker_records_handler_failure():
     queue = InMemoryJobQueue()
     job = queue.enqueue(Job(type=JobType.PROCESS_INTELLIGENCE))
