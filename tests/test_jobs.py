@@ -42,3 +42,20 @@ def test_worker_marks_missing_handler_as_failed():
     assert completed.status == JobStatus.FAILED
     assert "No handler registered" in completed.error
     assert completed.finished_at is not None
+
+
+def test_research_ingest_follow_up_is_idempotent():
+    queue = InMemoryJobQueue()
+    worker = JobWorker(queue)
+    job = Job(
+        type=JobType.INGEST_RESEARCH,
+        payload={"business_id": "b1", "policy_id": "p1", "exposure": 0.5},
+        result={"observations": [{"id": "obs-1"}]},
+        status=JobStatus.SUCCEEDED,
+    )
+
+    follow_ups = worker._follow_up_jobs(job)
+
+    assert len(follow_ups) == 1
+    assert follow_ups[0].type == JobType.REPROCESS_OBSERVATION
+    assert follow_ups[0].idempotency_key == "reprocess:obs-1:p1"
