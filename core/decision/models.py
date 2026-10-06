@@ -28,3 +28,4 @@ class DecisionRecommendation(BaseModel):
     confidence: float = Field(ge=0, le=1)
     signal_id: str
     factor_key: str
+    policy_id: str | None = None
