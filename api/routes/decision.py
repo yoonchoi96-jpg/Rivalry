@@ -47,6 +47,8 @@ def recommend_with_policy(policy_id: str, impact: BusinessImpact):
 
 @router.post("/recommend", response_model=DecisionRecommendation)
 def recommend(impact: BusinessImpact, policy: DecisionPolicy):
+    if policy.id is None or not policy.id.strip():
+        raise HTTPException(status_code=400, detail="decision policy id is required")
     signal = signal_repository.get(impact.signal_id)
     if signal is None:
         raise HTTPException(status_code=400, detail="signal not found")
