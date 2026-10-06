@@ -2,6 +2,7 @@ from __future__ import annotations
 from core.evidence.models import Evidence
 from core.measurement.models import Measurement
 from core.observation.models import Observation
+from core.signal.models import Signal
 from .models import QAResult, QAStage, QAStatus
 
 def validate_source(url: str | None, reliability: float, coverage: float) -> QAResult:
@@ -30,3 +31,17 @@ def validate_measurement(measurement: Measurement) -> QAResult:
     if not measurement.observation_ids: issues.append("measurement has no observation lineage")
     if measurement.confidence < 0.5: issues.append("measurement confidence is below 0.5")
     return QAResult(stage=QAStage.MEASUREMENT,status=QAStatus.FAIL if "formula is empty" in issues or "measurement has no observation lineage" in issues else QAStatus.WARN if issues else QAStatus.PASS,score=max(0.0,1-0.3*len(issues)),checks=["formula","observation_lineage","confidence"],issues=issues,measurement_ids=[measurement.id])
+
+def validate_signal(signal: Signal) -> QAResult:
+    issues=[]
+    if signal.signal_kind.value == "change" and signal.reference_value is None:
+        issues.append("change signal requires a reference value")
+    if signal.reference_value is not None and signal.delta is None:
+        issues.append("reference value requires delta")
+    if not signal.observation_ids and not signal.measurement_ids:
+        issues.append("signal has no observation or measurement lineage")
+    if signal.confidence < 0.5:
+        issues.append("signal confidence is below 0.5")
+    hard_fail = {"change signal requires a reference value", "reference value requires delta", "signal has no observation or measurement lineage"}
+    status=QAStatus.FAIL if any(issue in hard_fail for issue in issues) else QAStatus.WARN if issues else QAStatus.PASS
+    return QAResult(stage=QAStage.SIGNAL,status=status,score=max(0.0,1-0.25*len(issues)),checks=["reference","delta","lineage","confidence"],issues=issues,observation_ids=signal.observation_ids,measurement_ids=signal.measurement_ids)

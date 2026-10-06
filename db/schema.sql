@@ -61,3 +61,19 @@ CREATE INDEX IF NOT EXISTS idx_reviews_competitor_created ON reviews (competitor
 CREATE INDEX IF NOT EXISTS idx_predictions_competitor_predicted ON predictions (competitor_id, predicted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_snapshots_competitor_captured ON snapshots (competitor_id, captured_at DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_competitor_created ON alerts (competitor_id, created_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS signals (
+    id TEXT PRIMARY KEY, entity_id TEXT NOT NULL, definition_key TEXT NOT NULL,
+    signal_kind TEXT NOT NULL, direction TEXT NOT NULL,
+    current_value DOUBLE PRECISION NOT NULL, reference_value DOUBLE PRECISION,
+    delta DOUBLE PRECISION, delta_pct DOUBLE PRECISION, detected_at TIMESTAMPTZ NOT NULL,
+    observation_ids_json JSONB NOT NULL DEFAULT '[]', measurement_ids_json JSONB NOT NULL DEFAULT '[]',
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 0.5, significance DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+    knowledge_kind TEXT NOT NULL DEFAULT 'estimate', rationale TEXT NOT NULL DEFAULT '',
+    freshness_minutes INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_signals_entity_definition_detected
+    ON signals (entity_id, definition_key, detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_signals_significance_detected
+    ON signals (significance DESC, detected_at DESC);
