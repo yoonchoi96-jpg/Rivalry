@@ -29,7 +29,7 @@ from .pipeline import detect_changes, normalize_collection
 class JobHandlers:
     """Application handlers kept independent from the queue implementation."""
 
-    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None, research: ResearchExecutor | None = None, impact_repository=None, decision_policies=None, decision_recommendations=None, signal_repository=None) -> None:
+    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None, research: ResearchExecutor | None = None, impact_repository=None, decision_policies=None, decision_recommendations=None, signal_repository=None, observation_repository=None) -> None:
         self.intelligence = intelligence or IntelligenceService()
         self.adapters = adapters or AdapterRegistry()
         if adapters is None:
@@ -184,24 +184,30 @@ class JobHandlers:
             entity_id = str(job.payload.get("business_id") or "")
             if not entity_id:
                 continue
+            structured = evidence.get("observation") if isinstance(evidence.get("observation"), dict) else {}
+            observed_at = structured.get("observed_at") or evidence.get("captured_at")
+            normalized = structured.get("normalized_value")
             observation = Observation(
                 id=sha256(str(evidence.get("id", "")).encode()).hexdigest()[:32],
                 entity_id=entity_id,
                 entity_type="business",
                 metric=str(item.get("factor_key") or "research_evidence"),
-                raw_value=evidence.get("statement"),
-                normalized_value=None,
-                observed_at=str(evidence.get("captured_at") or ""),
+                raw_value=structured.get("raw_value", evidence.get("statement")),
+                normalized_value=float(normalized) if isinstance(normalized, (int, float)) else None,
+                unit=str(structured.get("unit")) if structured.get("unit") else None,
+                currency=str(structured.get("currency")) if structured.get("currency") else None,
+                geography=str(structured.get("geography")) if structured.get("geography") else None,
+                observed_at=str(observed_at or ""),
                 source_id=str(item.get("source_id") or evidence.get("source_id") or ""),
                 evidence_id=str(evidence.get("id") or ""),
                 access_method=AccessMethod.WEB,
                 confidence=float(evidence.get("confidence", 0.5)),
                 knowledge_kind=KnowledgeKind.FACT,
-                provenance={"research_question": raw.get("question")},
+                provenance={"research_question": raw.get("question"), "research_factor": item.get("factor_key"), "structured": bool(structured)},
             )
             self.observation_repository.save(observation)
             observations.append(observation.model_dump(mode="json"))
-        return {"observations": observations}
+        return {"observations": observations, "observation_count": len(observations)}
 
     def execute_research(self, job: Job) -> dict[str, object]:
         if self.research is None:
@@ -213,4 +219,4 @@ class JobHandlers:
         return self.research.execute(ResearchPlan.model_validate(plan))
 
     def registry(self) -> dict[JobType, Any]:
-        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.GENERATE_DECISION: self.generate_decision, JobType.DISPATCH_ACTION: self.dispatch_action}
+        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.INGEST_RESEARCH: self.ingest_research, JobType.GENERATE_DECISION: self.generate_decision, JobType.DISPATCH_ACTION: self.dispatch_action}
