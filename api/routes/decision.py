@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from core.decision.engine import DecisionEngine
 from core.decision.models import DecisionPolicy, DecisionRecommendation
 from core.impact.models import BusinessImpact
+from core.jobs.models import Job, JobType
 from core.jobs.runtime import (
     decision_policy_registry,
     decision_recommendation_repository,
@@ -10,6 +12,24 @@ from core.jobs.runtime import (
 )
 
 router = APIRouter(prefix="/decision", tags=["decision"])
+
+
+class DecisionJobRequest(BaseModel):
+    impact_id: str
+    policy_id: str
+    idempotency_key: str | None = None
+
+
+@router.post("/jobs", response_model=Job, status_code=202)
+def enqueue_decision_job(request: DecisionJobRequest):
+    from core.jobs.runtime import job_queue
+    return job_queue.enqueue(
+        Job(
+            type=JobType.GENERATE_DECISION,
+            payload={"impact_id": request.impact_id, "policy_id": request.policy_id},
+            idempotency_key=request.idempotency_key,
+        )
+    )
 
 
 @router.post("/policies/{policy_id}", response_model=DecisionPolicy, status_code=201)
