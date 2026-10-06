@@ -72,6 +72,9 @@ class JobWorker:
                 payload={"research": job.result, "business_id": job.payload.get("business_id")},
                 idempotency_key=f"ingest-research:{job.id}",
             )]
+        if job.type == JobType.INGEST_RESEARCH:
+            observations = job.result.get("observations", [])
+            return [Job(type=JobType.REPROCESS_OBSERVATION, payload={"observation": item}) for item in observations if isinstance(item, dict)]
         if job.type == JobType.PROCESS_INTELLIGENCE:
             change = job.payload.get("change")
             if isinstance(change, dict):
