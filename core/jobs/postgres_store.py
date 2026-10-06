@@ -156,21 +156,13 @@ class PostgresJobStore(JobStore):
         with self._connect(self.dsn) as conn, conn.cursor() as cur:
             cur.execute(
                 self._SELECT.replace("FROM jobs", "FROM job_outbox o JOIN jobs j ON j.id=o.job_id") +
-                " WHERE o.published_at IS NULL ORDER BY o.created_at ASC LIMIT %s",
+                " WHERE o.published_at IS NULL "
+                "AND (j.next_attempt_at IS NULL OR j.next_attempt_at <= NOW()) "
+                "ORDER BY o.created_at ASC LIMIT %s",
                 (limit,),
             )
             rows = cur.fetchall()
         return [self._row_to_job(row) for row in rows]
-
-    def mark_outbox_published(self, job_id: str, enqueue_version: int) -> None:
-        with self._connect(self.dsn) as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE job_outbox SET published_at=NOW(), last_error=NULL
-                WHERE job_id=%s AND enqueue_version=%s
-                """,
-                (job_id, enqueue_version),
-            )
 
     @staticmethod
     def _row_to_job(row: tuple[Any, ...]) -> Job:
