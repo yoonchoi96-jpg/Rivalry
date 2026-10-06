@@ -19,4 +19,3 @@ class BusinessImpact(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     observation_ids: list[str] = Field(default_factory=list)
     measurement_ids: list[str] = Field(default_factory=list)
-    signal_id: str
