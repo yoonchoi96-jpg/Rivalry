@@ -35,7 +35,7 @@ class ActionDispatcher:
                     )
                 ],
             )
-            follow_up_payload = {"plan": plan.model_dump(mode="json")}
+            follow_up_payload = {"plan": plan.model_dump(mode="json"), "business_id": recommendation.business_id}
 
         return RecommendationAction(
             recommendation_id=recommendation.impact_id,
