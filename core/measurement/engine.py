@@ -58,7 +58,8 @@ class MeasurementEngine:
         if qa.status.value == "fail":
             raise ValueError("measurement QA failed")
 
-        delta, delta_pct, direction = detect_change(value, 0.0)
+        signal_current = 1.0 + value
+        delta, delta_pct, direction = detect_change(signal_current, 1.0)
         signal_id = sha256(
             f"{definition_key}:change:{measurement_id}".encode("utf-8")
         ).hexdigest()[:32]
@@ -68,8 +69,8 @@ class MeasurementEngine:
             definition_key=definition_key,
             signal_kind=SignalKind.CHANGE,
             direction=direction,
-            current_value=value,
-            reference_value=0.0,
+            current_value=signal_current,
+            reference_value=1.0,
             delta=delta,
             delta_pct=delta_pct,
             detected_at=datetime.now(timezone.utc).isoformat(),
