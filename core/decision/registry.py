@@ -27,3 +27,4 @@ class DecisionPolicyRegistry:
 
     def remove(self, policy_id: str) -> bool:
         return self._policies.pop(policy_id, None) is not None
+
