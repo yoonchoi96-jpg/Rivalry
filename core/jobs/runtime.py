@@ -15,6 +15,8 @@ from core.observation.postgres_repository import PostgresObservationRepository
 from core.observation.repository import InMemoryObservationRepository
 from core.signal.postgres_repository import PostgresSignalRepository
 from core.signal.repository import InMemorySignalRepository
+from core.impact.postgres_repository import PostgresImpactRepository
+from core.impact.repository import InMemoryImpactRepository
 from engines.competitor.repository import InMemoryCompetitorRepository, PostgresCompetitorRepository
 from engines.competitor.service import CompetitorService
 from .queue import InMemoryJobQueue
@@ -62,6 +64,10 @@ def _build_signal_repository():
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     return PostgresSignalRepository(dsn) if dsn else InMemorySignalRepository()
 
+def _build_impact_repository():
+    dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
+    return PostgresImpactRepository(dsn) if dsn else InMemoryImpactRepository()
+
 def _build_competitor_service() -> CompetitorService:
     dsn=os.getenv("RIVALRY_DATABASE_URL","").strip()
     repository=PostgresCompetitorRepository(dsn) if dsn else InMemoryCompetitorRepository()
@@ -75,4 +81,5 @@ evidence_repository=_build_evidence_repository()
 observation_repository=_build_observation_repository()
 measurement_repository=_build_measurement_repository()
 signal_repository=_build_signal_repository()
+impact_repository=_build_impact_repository()
 competitor_service=_build_competitor_service()
