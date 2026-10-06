@@ -38,6 +38,11 @@ def test_research_action_builds_executable_follow_up_plan():
     assert action.follow_up_payload["exposure"] == 0.5
 
 
+def test_research_action_preserves_impact_exposure():
+    action = ActionDispatcher().dispatch(make_recommendation("investigate"), exposure=0.83)
+    assert action.follow_up_payload["exposure"] == 0.83
+
+
 def test_unknown_action_defaults_to_safe_alert():
     action = ActionDispatcher().dispatch(make_recommendation("change_packaging"))
     assert action.kind == ActionKind.ALERT
