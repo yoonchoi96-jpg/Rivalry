@@ -105,3 +105,29 @@ def test_research_ingest_follow_up_is_idempotent():
     assert len(follow_ups) == 1
     assert follow_ups[0].type == JobType.REPROCESS_OBSERVATION
     assert follow_ups[0].idempotency_key == "reprocess:obs-1:p1"
+
+
+def test_worker_enqueues_follow_up_before_ack():
+    class RecordingQueue(InMemoryJobQueue):
+        def __init__(self):
+            super().__init__()
+            self.ack_seen_with_follow_up = False
+
+        def ack(self, job):
+            self.ack_seen_with_follow_up = self.size() > 0
+            super().ack(job)
+
+    queue = RecordingQueue()
+    queue.enqueue(Job(
+        type=JobType.PROCESS_INTELLIGENCE,
+        payload={"change": {"id": "change-1"}},
+    ))
+    worker = JobWorker(
+        queue,
+        {JobType.PROCESS_INTELLIGENCE: lambda _: {"ok": True}},
+    )
+
+    completed = worker.run_once()
+
+    assert completed.status == JobStatus.SUCCEEDED
+    assert queue.ack_seen_with_follow_up
