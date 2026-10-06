@@ -207,8 +207,15 @@ class RedisJobQueue:
         # next_attempt_at is due, so a crash cannot lose the scheduled retry.
         prepare = getattr(self.job_store, "prepare_enqueue", None)
         if callable(prepare):
-            return prepare(job)
-        return self.job_store.save(job)
+            replacement = prepare(job)
+        else:
+            replacement = self.job_store.save(job)
+
+        # The retry is now durably recorded with a newer enqueue_version.
+        # A crash before this ACK leaves the original delivery reclaimable,
+        # but _decode_entry will recognize it as stale.
+        self.ack(job)
+        return replacement
 
     def metrics(self) -> dict[str, int]:
         """Return Redis-backed queue state metrics for operational monitoring."""
