@@ -146,6 +146,8 @@ class JobWorker:
             if job.status == JobStatus.SUCCEEDED:
                 job.finished_at = datetime.now(timezone.utc).isoformat()
                 self.queue.update(job)
+                for follow_up in self._follow_up_jobs(job):
+                    self.queue.enqueue(follow_up)
                 self._ack(job)
             elif job.error and job.error.startswith("No handler registered"):
                 job.finished_at = datetime.now(timezone.utc).isoformat()
@@ -158,9 +160,6 @@ class JobWorker:
                 job.next_attempt_at = None
                 self.queue.update(job)
                 self._dead_letter(job)
-        if job.status == JobStatus.SUCCEEDED:
-            for follow_up in self._follow_up_jobs(job):
-                self.queue.enqueue(follow_up)
         return job
 
     def drain(self, limit: int | None = None) -> list[Job]:
