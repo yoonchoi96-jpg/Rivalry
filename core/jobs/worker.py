@@ -53,7 +53,7 @@ class JobWorker:
                 return [Job(
                     type=JobType.DISPATCH_ACTION,
                     payload={"recommendation": recommendation},
-                    idempotency_key=f"action:{recommendation.get("impact_id", job.id)}",
+                    idempotency_key=f"action:{recommendation.get('impact_id', job.id)}:{recommendation.get('policy_id', 'default')}:{recommendation.get('action', 'unknown')}",
                 )]
         if job.type == JobType.PROCESS_INTELLIGENCE:
             change = job.payload.get("change")
