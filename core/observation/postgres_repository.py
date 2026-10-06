@@ -26,6 +26,13 @@ class PostgresObservationRepository(ObservationRepository):
                 {**row,"raw_value":Jsonb(row["raw_value"]),"provenance":Jsonb(row["provenance"])})
         return observation
 
+    def latest_for_entity_metric(self, entity_id: str, metric: str, *, exclude_id: str | None = None) -> Observation | None:
+        with self._connect(self.dsn) as conn, conn.cursor() as cur:
+            cur.execute("SELECT id,entity_id,entity_type,metric,raw_value,normalized_value,unit,currency,geography,observed_at,source_id,evidence_id,access_method,confidence,knowledge_kind,provenance_json,model_version FROM observations WHERE entity_id=%s AND metric=%s AND (%s IS NULL OR id<>%s) ORDER BY observed_at DESC LIMIT 1", (entity_id, metric, exclude_id, exclude_id))
+            row = cur.fetchone()
+        if row is None: return None
+        return Observation(id=row[0],entity_id=row[1],entity_type=row[2],metric=row[3],raw_value=row[4],normalized_value=row[5],unit=row[6],currency=row[7],geography=row[8],observed_at=row[9],source_id=row[10],evidence_id=row[11],access_method=AccessMethod(row[12]),confidence=row[13],knowledge_kind=KnowledgeKind(row[14]),provenance=row[15] or {},model_version=row[16])
+
     def get(self, observation_id: str) -> Observation | None:
         with self._connect(self.dsn) as conn, conn.cursor() as cur:
             cur.execute("""SELECT id,entity_id,entity_type,metric,raw_value,normalized_value,unit,currency,geography,observed_at,source_id,evidence_id,access_method,confidence,knowledge_kind,provenance_json,model_version
