@@ -1,10 +1,27 @@
 from datetime import datetime, timezone
 
+from adapters.open_food_facts import OpenFoodFactsAdapter
 from core.evidence.repository import InMemoryEvidenceRepository
 from core.research.executor import ResearchExecutor
 from core.research.models import ResearchMethod, ResearchPlan, ResearchTask
 from core.source.models import SourceKind, SourceProfile
 from core.source.repository import InMemorySourceRepository
+from adapters.registry import AdapterRegistry
+
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def read(self):
+        import json
+        return json.dumps(self.payload).encode("utf-8")
 
 
 def test_research_executor_persists_evidence_and_qa():
@@ -47,3 +64,48 @@ def test_research_executor_falls_back_when_primary_handler_fails():
         ResearchTask(factor_key="demand", objective="verify", method=ResearchMethod.WEB, priority=80)
     ]))
     assert result["tasks"][0]["source_id"] == "web"
+
+
+def test_research_executor_uses_registered_adapter():
+    requests = []
+
+    def opener(request, timeout):
+        requests.append((request.full_url, timeout))
+        return FakeResponse({
+            "products": [{
+                "code": "123",
+                "product_name": "Example",
+                "brands": "Example Brand",
+                "url": "https://world.openfoodfacts.org/product/123",
+            }]
+        })
+
+    adapter = OpenFoodFactsAdapter(opener=opener)
+    registry = AdapterRegistry()
+    registry.register_source("openfoodfacts", adapter)
+
+    sources = InMemorySourceRepository()
+    sources.save(SourceProfile(
+        id="off", name="Open Food Facts", kind=SourceKind.API,
+        adapter_id="openfoodfacts", reliability=.9, coverage=.9, normalization_quality=.9,
+    ))
+    evidence = InMemoryEvidenceRepository()
+    executor = ResearchExecutor(sources, evidence, adapters=registry)
+
+    result = executor.execute(ResearchPlan(question="products?", tasks=[
+        ResearchTask(
+            factor_key="products",
+            objective="find products",
+            method=ResearchMethod.API,
+            source_id="off",
+            parameters={"query": "Example", "page_size": 5},
+            priority=90,
+        )
+    ]))
+
+    item = result["tasks"][0]
+    assert item["source_id"] == "off"
+    assert "Example is listed by Example Brand" in item["evidence"]["statement"]
+    assert item["evidence"]["url"].startswith("https://")
+    assert item["evidence"]["metadata"]["product_count"] == 1
+    assert requests[0][1] == 10.0
