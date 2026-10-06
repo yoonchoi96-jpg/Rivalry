@@ -75,6 +75,12 @@ class JobWorker:
         if job.type == JobType.INGEST_RESEARCH:
             observations = job.result.get("observations", [])
             return [Job(type=JobType.REPROCESS_OBSERVATION, payload={"observation": item}) for item in observations if isinstance(item, dict)]
+        if job.type == JobType.REPROCESS_OBSERVATION:
+            impact = job.result.get("impact")
+            policy_id = job.result.get("policy_id")
+            if isinstance(impact, dict) and isinstance(policy_id, str) and policy_id:
+                return [Job(type=JobType.GENERATE_DECISION, payload={"impact_id": impact.get("id"), "policy_id": policy_id}, idempotency_key=f"research-decision:{impact.get('id')}:{policy_id}")]
+            return []
         if job.type == JobType.PROCESS_INTELLIGENCE:
             change = job.payload.get("change")
             if isinstance(change, dict):
