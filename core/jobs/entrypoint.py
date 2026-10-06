@@ -7,7 +7,16 @@ import time
 
 from core.research.executor import ResearchExecutor
 from .handlers import JobHandlers
-from .runtime import evidence_repository, intelligence_store, job_queue, source_repository
+from .runtime import (
+    decision_policy_registry,
+    decision_recommendation_repository,
+    evidence_repository,
+    impact_repository,
+    intelligence_store,
+    job_queue,
+    signal_repository,
+    source_repository,
+)
 from .worker import JobWorker
 
 logger = logging.getLogger(__name__)
@@ -26,7 +35,13 @@ def run_worker(*, poll_interval: float | None = None) -> None:
     signal.signal(signal.SIGINT, stop)
 
     research = ResearchExecutor(source_repository, evidence_repository)
-    handlers_obj = JobHandlers(store=intelligence_store)
+    handlers_obj = JobHandlers(
+        store=intelligence_store,
+        impact_repository=impact_repository,
+        decision_policies=decision_policy_registry,
+        decision_recommendations=decision_recommendation_repository,
+        signal_repository=signal_repository,
+    )
     handlers_obj.research = research
     handlers = handlers_obj.registry()
     worker = JobWorker(job_queue, handlers=handlers)
