@@ -54,4 +54,5 @@ class DecisionEngine:
             confidence=confidence,
             signal_id=signal.id,
             factor_key=impact.factor_key,
+            policy_id=policy.id,
         )
