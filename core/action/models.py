@@ -4,6 +4,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from core.jobs.models import JobType
+
 
 class ActionKind(StrEnum):
     ALERT = "alert"
@@ -22,3 +24,4 @@ class RecommendationAction(BaseModel):
     signal_id: str
     factor_key: str
     policy_id: str | None = None
+    follow_up_job: JobType | None = None
