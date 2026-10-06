@@ -15,9 +15,7 @@ logger = logging.getLogger(__name__)
 
 def run_worker(*, poll_interval: float | None = None) -> None:
     """Run a long-lived worker process against the shared durable runtime."""
-    interval = poll_interval if poll_interval is not None else float(
-        os.getenv("RIVALRY_WORKER_POLL_INTERVAL", "1.0")
-    )
+    interval = poll_interval if poll_interval is not None else float(os.getenv("RIVALRY_WORKER_POLL_INTERVAL", "1.0"))
     stopping = False
 
     def stop(_signum: int, _frame: object) -> None:
@@ -28,7 +26,9 @@ def run_worker(*, poll_interval: float | None = None) -> None:
     signal.signal(signal.SIGINT, stop)
 
     research = ResearchExecutor(source_repository, evidence_repository)
-    handlers = JobHandlers(store=intelligence_store, research=research).registry()
+    handlers_obj = JobHandlers(store=intelligence_store)
+    handlers_obj.research = research
+    handlers = handlers_obj.registry()
     worker = JobWorker(job_queue, handlers=handlers)
     logger.info("Rivalry worker started")
     while not stopping:
