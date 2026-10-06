@@ -15,7 +15,7 @@ class DecisionEngine:
         signal: Signal,
         policy: DecisionPolicy,
     ) -> DecisionRecommendation:
-        if impact.business_id != signal.entity_id and impact.entity_id != signal.entity_id:
+        if impact.entity_id != signal.entity_id:
             raise ValueError("impact and signal entity lineage does not match")
         if impact.signal_id != signal.id:
             raise ValueError("impact signal_id does not match signal")
