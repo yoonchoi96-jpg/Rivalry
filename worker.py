@@ -23,6 +23,7 @@ handlers_obj = JobHandlers(
     decision_recommendations=decision_recommendation_repository,
     signal_repository=signal_repository,
     observation_repository=observation_repository,
+    measurement_repository=measurement_repository,
 )
 handlers_obj.research = research
 worker = JobWorker(job_queue, handlers_obj.registry())
