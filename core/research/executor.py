@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from hashlib import sha256
 from datetime import datetime, timezone
+from hashlib import sha256
 from typing import Any
 
 from core.evidence.models import AccessMethod, Evidence, EvidenceSource, KnowledgeKind
@@ -19,11 +19,7 @@ ResearchHandler = Callable[[ResearchTask, SourceProfile], dict[str, Any]]
 
 
 class ResearchExecutor:
-    """Execute research tasks through registered sources and persist evidence.
-
-    Network access is deliberately injected through handlers so the core stays
-    provider-agnostic and testable.
-    """
+    """Execute research tasks through registered sources and persist evidence."""
 
     def __init__(
         self,
@@ -93,8 +89,11 @@ class ResearchExecutor:
                 if source_qa.status == QAStatus.FAIL:
                     raise ValueError("source QA failed")
                 self.evidence.save_source(source_record)
+                evidence_id = sha256(
+                    f"{source.id}:{task.factor_key}:{statement}".encode("utf-8")
+                ).hexdigest()[:32]
                 evidence = Evidence(
-                    id=str(uuid4()),
+                    id=evidence_id,
                     source_id=source.id,
                     statement=statement,
                     captured_at=now,
