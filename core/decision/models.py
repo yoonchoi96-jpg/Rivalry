@@ -12,6 +12,7 @@ class DecisionPolicyRule(BaseModel):
 
 
 class DecisionPolicy(BaseModel):
+    id: str | None = None
     name: str
     default_action: str
     default_rationale: str
