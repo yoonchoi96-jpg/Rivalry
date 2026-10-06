@@ -171,3 +171,47 @@ def test_ingest_research_persists_observation_lineage():
     assert saved.normalized_value == 12000
     assert saved.unit == "KRW"
     assert saved.currency == "KRW"
+
+
+def test_research_observation_reprocessing_builds_measurement_signal_and_impact():
+    from core.measurement.repository import InMemoryMeasurementRepository
+
+    observations = InMemoryObservationRepository()
+    measurements = InMemoryMeasurementRepository()
+    signals = InMemorySignalRepository()
+    impacts = InMemoryImpactRepository()
+    handlers = JobHandlers(
+        observation_repository=observations,
+        measurement_repository=measurements,
+        signal_repository=signals,
+        impact_repository=impacts,
+    )
+
+    for evidence_id, captured_at, value in [
+        ("ev-old", "2026-10-06T00:00:00Z", 100),
+        ("ev-new", "2026-10-07T00:00:00Z", 110),
+    ]:
+        result = handlers.ingest_research(Job(
+            type=JobType.INGEST_RESEARCH,
+            payload={"business_id": "b-loop", "research": {"question": "price", "tasks": [{
+                "factor_key": "competitive_price",
+                "evidence": {
+                    "id": evidence_id,
+                    "captured_at": captured_at,
+                    "observation": {"normalized_value": value, "unit": "KRW", "currency": "KRW"},
+                },
+            }]}},
+        ))
+
+    result = handlers.reprocess_observation(Job(
+        type=JobType.REPROCESS_OBSERVATION,
+        payload={
+            "observation": result["observations"][0],
+            "business_id": "b-loop",
+            "policy_id": "policy-v1",
+        },
+    ))
+    assert result["measurement"]["value"] == 0.1
+    assert result["signal"]["delta_pct"] == 10.0
+    assert result["impact"]["measurement_ids"] == [result["measurement"]["id"]]
+    assert result["policy_id"] == "policy-v1"
