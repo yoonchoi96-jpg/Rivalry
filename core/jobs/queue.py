@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from threading import Lock
+import time
 from typing import Protocol
 
 from .models import Job, JobStatus
@@ -22,6 +23,7 @@ class InMemoryJobQueue:
         self._pending: deque[str] = deque()
         self._jobs: dict[str, Job] = {}
         self._idempotency: dict[str, str] = {}
+        self._not_before: dict[str, float] = {}
         self._lock = Lock()
 
     def enqueue(self, job: Job) -> Job:
@@ -39,11 +41,19 @@ class InMemoryJobQueue:
 
     def dequeue(self) -> Job | None:
         with self._lock:
-            while self._pending:
+            now = time.monotonic()
+            for _ in range(len(self._pending)):
                 job_id = self._pending.popleft()
                 job = self._jobs.get(job_id)
-                if job is not None and job.status == JobStatus.QUEUED:
-                    return job
+                if job is None or job.status != JobStatus.QUEUED:
+                    self._not_before.pop(job_id, None)
+                    continue
+                due = self._not_before.get(job_id, 0.0)
+                if due > now:
+                    self._pending.append(job_id)
+                    continue
+                self._not_before.pop(job_id, None)
+                return job
             return None
 
     def get(self, job_id: str) -> Job | None:
@@ -60,6 +70,7 @@ class InMemoryJobQueue:
     def requeue(self, job: Job, *, delay_seconds: float = 0) -> Job:
         with self._lock:
             self._jobs[job.id] = job
+            self._not_before[job.id] = time.monotonic() + max(0.0, delay_seconds)
             self._pending.append(job.id)
             return job
 
