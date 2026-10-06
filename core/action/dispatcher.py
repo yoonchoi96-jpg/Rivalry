@@ -18,7 +18,7 @@ class ActionDispatcher:
     def __init__(self, registry: ActionRegistry | None = None) -> None:
         self.registry = registry or ActionRegistry()
 
-    def dispatch(self, recommendation: DecisionRecommendation) -> RecommendationAction:
+    def dispatch(self, recommendation: DecisionRecommendation, *, exposure: float = 0.5) -> RecommendationAction:
         definition = self.registry.resolve(recommendation.action)
         kind = ActionKind.RESEARCH if definition.route.value == ActionKind.RESEARCH else ActionKind.ALERT
         follow_up_payload = None
@@ -35,7 +35,7 @@ class ActionDispatcher:
                     )
                 ],
             )
-            follow_up_payload = {"plan": plan.model_dump(mode="json"), "business_id": recommendation.business_id, "policy_id": recommendation.policy_id, "exposure": 0.5}
+            follow_up_payload = {"plan": plan.model_dump(mode="json"), "business_id": recommendation.business_id, "policy_id": recommendation.policy_id, "exposure": exposure}
 
         return RecommendationAction(
             recommendation_id=recommendation.impact_id,
