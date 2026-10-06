@@ -197,16 +197,29 @@ class RedisJobQueue:
 
     def requeue(self, job: Job, *, delay_seconds: float = 0) -> Job:
         if delay_seconds <= 0:
+            # Publish the replacement before acknowledging the current
+            # delivery. If the worker crashes between these operations, the
+            # original delivery remains reclaimable and enqueue_version makes
+            # it stale once the replacement exists.
+            replacement = self._enqueue_existing(job)
             self.ack(job)
-            return self._enqueue_existing(job)
+            return replacement
+
+        from datetime import datetime, timedelta, timezone
+
         job.status = JobStatus.QUEUED
         job.enqueue_version += 1
-        self.job_store.save(job)
-        self.client.zadd(
-            self.delayed_key,
-            {json.dumps(job.model_dump(mode="json"), sort_keys=True): time.time() + delay_seconds},
-        )
-        return job
+        job.next_attempt_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+        ).isoformat()
+
+        # Delayed retries are durable in the same PostgreSQL outbox as normal
+        # enqueues. The outbox publisher only releases jobs once
+        # next_attempt_at is due, so a crash cannot lose the scheduled retry.
+        prepare = getattr(self.job_store, "prepare_enqueue", None)
+        if callable(prepare):
+            return prepare(job)
+        return self.job_store.save(job)
 
     def metrics(self) -> dict[str, int]:
         """Return Redis-backed queue state metrics for operational monitoring."""
