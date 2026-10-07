@@ -69,6 +69,51 @@ def test_build_alert_returns_actionable_alert():
     assert result["recommended_action"] == "monitor_before_matching_price"
 
 
+def test_dispatch_action_preserves_recommendation_revision_in_alert_identity():
+    from core.decision.models import DecisionRecommendation
+    from core.impact.models import BusinessImpact
+    from core.impact.repository import InMemoryImpactRepository
+
+    store = IntelligenceStore()
+    impacts = InMemoryImpactRepository()
+    impact = BusinessImpact(
+        id="impact-1",
+        business_id="b1",
+        signal_id="signal-1",
+        magnitude=0.8,
+        exposure=0.75,
+        confidence=0.9,
+        rationale="competitive pressure",
+    )
+    impacts.save(impact)
+    handlers = JobHandlers(store=store, impact_repository=impacts)
+
+    recommendation = DecisionRecommendation(
+        business_id="b1",
+        impact_id="impact-1",
+        action="review",
+        priority=0.8,
+        rationale="review now",
+        confidence=0.9,
+        signal_id="signal-1",
+        factor_key="competitive_price",
+        policy_id="policy-v1",
+    )
+    first = handlers.dispatch_action(Job(
+        type=JobType.DISPATCH_ACTION,
+        payload={"recommendation": recommendation.model_dump(mode="json")},
+    ))
+    revised = recommendation.model_copy(update={"rationale": "review after verification"})
+    second = handlers.dispatch_action(Job(
+        type=JobType.DISPATCH_ACTION,
+        payload={"recommendation": revised.model_dump(mode="json")},
+    ))
+
+    assert first["alert"]["id"] != second["alert"]["id"]
+    assert first["alert"]["recommendation_revision"] != second["alert"]["recommendation_revision"]
+    assert len(store.all_alerts()) == 2
+
+
 def test_analyze_reviews_returns_summary():
     handlers = JobHandlers()
     result = handlers.analyze_reviews(Job(type=JobType.ANALYZE_REVIEWS, payload={
