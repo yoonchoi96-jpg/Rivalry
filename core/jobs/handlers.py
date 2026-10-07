@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -160,7 +161,7 @@ class JobHandlers:
             exposure=impact.exposure if impact is not None else 0.5,
         )
         recommendation_revision = sha256(
-            recommendation.model_dump_json(sort_keys=True).encode("utf-8")
+            json.dumps(recommendation.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()[:16]
         alert = {
             "id": f"recommendation:{recommendation.impact_id}:{recommendation.policy_id or 'none'}:{recommendation.action}:{recommendation_revision}",
