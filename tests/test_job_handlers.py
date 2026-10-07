@@ -79,7 +79,9 @@ def test_dispatch_action_preserves_recommendation_revision_in_alert_identity():
     impact = BusinessImpact(
         id="impact-1",
         business_id="b1",
+        entity_id="b1",
         signal_id="signal-1",
+        factor_key="competitive_price",
         magnitude=0.8,
         exposure=0.75,
         confidence=0.9,
