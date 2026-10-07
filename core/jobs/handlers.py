@@ -175,7 +175,7 @@ class JobHandlers:
             "change_id": recommendation.impact_id,
             "competitor_id": recommendation.business_id,
             "type": "DECISION_RECOMMENDATION",
-            "impact_score": round((impact.magnitude * impact.exposure * 100), 10) if impact is not None else round(recommendation.priority * 100, 10),
+            "impact_score": round((abs(impact.magnitude) * impact.exposure * impact.significance * 100), 10) if impact is not None else round(recommendation.priority * 100, 10),
             "confidence": recommendation.confidence * 100,
             "summary": recommendation.rationale,
             "likely_cause": recommendation.factor_key,
