@@ -202,8 +202,11 @@ class JobHandlers:
             raise ValueError("ingest_research requires payload.research")
         if self.observation_repository is None:
             raise RuntimeError("observation repository is not configured")
+        tasks = raw.get("tasks", [])
+        if not isinstance(tasks, list):
+            raise ValueError("ingest_research requires payload.research.tasks to be a list")
         observations = []
-        for task_index, item in enumerate(raw.get("tasks", [])):
+        for task_index, item in enumerate(tasks):
             if not isinstance(item, dict) or not isinstance(item.get("evidence"), dict):
                 continue
             evidence = item["evidence"]
@@ -212,6 +215,8 @@ class JobHandlers:
                 continue
             structured = evidence.get("observation") if isinstance(evidence.get("observation"), dict) else {}
             observed_at = structured.get("observed_at") or evidence.get("captured_at")
+            if not observed_at:
+                raise ValueError("research evidence requires observed_at or captured_at")
             normalized = structured.get("normalized_value")
             observation = Observation(
                 id=sha256(
