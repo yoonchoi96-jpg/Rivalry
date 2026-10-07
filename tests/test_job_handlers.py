@@ -158,6 +158,7 @@ def test_dispatch_action_persists_canonical_action_for_alias():
     assert result["alert"]["recommended_action"] == "monitor"
     assert ":monitor:" in result["alert"]["id"]
     assert ":monitor_before_matching_price:" not in result["alert"]["id"]
+    assert result["alert"]["impact_score"] == 24.0
 
 
 def test_dispatch_action_aliases_share_canonical_alert_identity():
