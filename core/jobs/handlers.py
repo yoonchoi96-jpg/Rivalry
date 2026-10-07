@@ -164,7 +164,7 @@ class JobHandlers:
             json.dumps(recommendation.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()[:16]
         alert = {
-            "id": f"recommendation:{recommendation.impact_id}:{recommendation.policy_id or 'none'}:{recommendation.action}:{recommendation_revision}",
+            "id": f"recommendation:{recommendation.impact_id}:{recommendation.policy_id or 'none'}:{action.action}:{recommendation_revision}",
             "change_id": recommendation.impact_id,
             "competitor_id": recommendation.business_id,
             "type": "DECISION_RECOMMENDATION",
@@ -172,7 +172,7 @@ class JobHandlers:
             "confidence": recommendation.confidence * 100,
             "summary": recommendation.rationale,
             "likely_cause": recommendation.factor_key,
-            "recommended_action": recommendation.action,
+            "recommended_action": action.action,
             "action_kind": action.kind.value,
             "recommendation_id": action.recommendation_id,
             "signal_id": action.signal_id,
