@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import json
 from typing import Callable
 
 from .models import Job, JobStatus, JobType
@@ -59,10 +61,13 @@ class JobWorker:
         if job.type == JobType.GENERATE_DECISION:
             recommendation = job.result.get("recommendation")
             if isinstance(recommendation, dict):
+                revision = sha256(
+                    json.dumps(recommendation, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                ).hexdigest()[:16]
                 return [Job(
                     type=JobType.DISPATCH_ACTION,
                     payload={"recommendation": recommendation},
-                    idempotency_key=f"action:{recommendation.get('impact_id', job.id)}:{recommendation.get('policy_id', 'default')}:{recommendation.get('action', 'unknown')}",
+                    idempotency_key=f"action:{recommendation.get('impact_id', job.id)}:{revision}",
                 )]
         if job.type == JobType.DISPATCH_ACTION:
             action = job.result.get("action")
@@ -70,10 +75,13 @@ class JobWorker:
                 follow_up_job = action.get("follow_up_job")
                 payload = action.get("follow_up_payload")
                 if isinstance(follow_up_job, str) and isinstance(payload, dict):
+                    revision = sha256(
+                        json.dumps(action, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                    ).hexdigest()[:16]
                     return [Job(
                         type=JobType(follow_up_job),
                         payload=payload,
-                        idempotency_key=f"followup:{action.get('recommendation_id', job.id)}:{follow_up_job}",
+                        idempotency_key=f"followup:{action.get('recommendation_id', job.id)}:{revision}:{follow_up_job}",
                     )]
         if job.type == JobType.EXECUTE_RESEARCH:
             return [Job(
