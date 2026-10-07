@@ -200,8 +200,10 @@ class JobHandlers:
         raw = job.payload.get("research")
         if not isinstance(raw, dict):
             raise ValueError("ingest_research requires payload.research")
+        if self.observation_repository is None:
+            raise RuntimeError("observation repository is not configured")
         observations = []
-        for item in raw.get("tasks", []):
+        for task_index, item in enumerate(raw.get("tasks", [])):
             if not isinstance(item, dict) or not isinstance(item.get("evidence"), dict):
                 continue
             evidence = item["evidence"]
@@ -215,6 +217,7 @@ class JobHandlers:
                 id=sha256(
                     json.dumps(
                         {
+                            "task_index": task_index,
                             "evidence_id": evidence.get("id"),
                             "business_id": entity_id,
                             "factor_key": item.get("factor_key"),
