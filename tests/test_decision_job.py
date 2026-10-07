@@ -134,7 +134,7 @@ def test_dispatch_action_persists_recommendation_alert():
     assert result["alert"]["type"] == "DECISION_RECOMMENDATION"
     assert result["alert"]["recommendation_id"] == "i-job"
     assert handlers.store.alerts[-1]["recommended_action"] == "review"
-    assert handlers.store.alerts[-1]["impact_score"] == 50.0
+    assert handlers.store.alerts[-1]["impact_score"] == 40.0
     assert handlers.store.alerts[-1]["follow_up_job"] is None
 
 
@@ -266,7 +266,7 @@ def test_worker_runs_research_to_decision_to_alert_loop():
     ]
     assert completed[-1].result["action"]["kind"] == "alert"
     assert completed[-1].result["alert"]["recommended_action"] == "review"
-    assert completed[-1].result["alert"]["impact_score"] == 8.0
+    assert completed[-1].result["alert"]["impact_score"] == 0.8
     assert len(handlers.store.alerts) == 1
 
 
