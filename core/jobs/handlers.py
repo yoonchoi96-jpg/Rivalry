@@ -159,8 +159,11 @@ class JobHandlers:
             recommendation,
             exposure=impact.exposure if impact is not None else 0.5,
         )
+        recommendation_revision = sha256(
+            recommendation.model_dump_json(sort_keys=True).encode("utf-8")
+        ).hexdigest()[:16]
         alert = {
-            "id": f"recommendation:{recommendation.impact_id}:{recommendation.policy_id or 'none'}:{recommendation.action}",
+            "id": f"recommendation:{recommendation.impact_id}:{recommendation.policy_id or 'none'}:{recommendation.action}:{recommendation_revision}",
             "change_id": recommendation.impact_id,
             "competitor_id": recommendation.business_id,
             "type": "DECISION_RECOMMENDATION",
@@ -173,6 +176,7 @@ class JobHandlers:
             "recommendation_id": action.recommendation_id,
             "signal_id": action.signal_id,
             "policy_id": action.policy_id,
+            "recommendation_revision": recommendation_revision,
             "follow_up_job": action.follow_up_job.value if action.follow_up_job else None,
         }
         self.store.record_alert(alert)
