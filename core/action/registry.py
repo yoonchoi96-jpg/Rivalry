@@ -37,7 +37,12 @@ class ActionRegistry:
             name="investigate",
             route=ActionRoute.RESEARCH,
             follow_up_job=JobType.EXECUTE_RESEARCH,
-            aliases=("verify", "research", "research_competitor", "investigate_competitor_pricing"),
+            aliases=(
+                "verify",
+                "research",
+                "research_competitor",
+                "investigate_competitor_pricing",
+            ),
         ),
         ActionDefinition(
             name="compare_price",
@@ -52,6 +57,10 @@ class ActionRegistry:
         for definition in self._definitions:
             for name in (definition.name, *definition.aliases):
                 self._by_name[name] = definition
+
+    @property
+    def research_route(self) -> ActionRoute:
+        return ActionRoute.RESEARCH
 
     def resolve(self, action: str) -> ActionDefinition:
         normalized = action.strip().lower()
