@@ -158,6 +158,35 @@ def test_dispatch_action_persists_canonical_action_for_alias():
     assert ":monitor_before_matching_price:" not in result["alert"]["id"]
 
 
+def test_dispatch_action_aliases_share_canonical_alert_identity():
+    from core.decision.models import DecisionRecommendation
+    from core.impact.models import BusinessImpact
+    from core.impact.repository import InMemoryImpactRepository
+
+    store = IntelligenceStore()
+    impacts = InMemoryImpactRepository()
+    impacts.save(BusinessImpact(
+        id="impact-alias-identity", business_id="b1", entity_id="b1",
+        signal_id="signal-alias", factor_key="competitive_price",
+        magnitude=0.6, exposure=0.8, confidence=0.9, rationale="pressure",
+    ))
+    handlers = JobHandlers(store=store, impact_repository=impacts)
+    base = dict(
+        business_id="b1", impact_id="impact-alias-identity", priority=0.7,
+        rationale="monitor before matching", confidence=0.9,
+        signal_id="signal-alias", factor_key="competitive_price", policy_id="policy-v1",
+    )
+    canonical = DecisionRecommendation(action="monitor", **base)
+    alias = DecisionRecommendation(action="watch", **base)
+
+    first = handlers.dispatch_action(Job(type=JobType.DISPATCH_ACTION, payload={"recommendation": canonical.model_dump(mode="json")}))
+    second = handlers.dispatch_action(Job(type=JobType.DISPATCH_ACTION, payload={"recommendation": alias.model_dump(mode="json")}))
+
+    assert first["alert"]["id"] == second["alert"]["id"]
+    assert first["alert"]["recommendation_revision"] == second["alert"]["recommendation_revision"]
+    assert len(store.all_alerts()) == 1
+
+
 def test_analyze_reviews_returns_summary():
     handlers = JobHandlers()
     result = handlers.analyze_reviews(Job(type=JobType.ANALYZE_REVIEWS, payload={
