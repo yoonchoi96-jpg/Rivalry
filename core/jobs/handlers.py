@@ -280,7 +280,7 @@ class JobHandlers:
             id=sha256(f"research-impact:{signal.id}".encode()).hexdigest()[:32],
             business_id=str(job.payload.get("business_id") or current.entity_id),
             signal=signal,
-            factor_key=definition_key,
+            factor_key=current.metric,
             exposure=float(job.payload.get("exposure", 0.5)),
             magnitude=measurement.value,
             rationale=f"Research observation changed versus reference: {measurement.value:.4f}",
