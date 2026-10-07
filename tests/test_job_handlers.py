@@ -116,6 +116,48 @@ def test_dispatch_action_preserves_recommendation_revision_in_alert_identity():
     assert len(store.all_alerts()) == 2
 
 
+def test_dispatch_action_persists_canonical_action_for_alias():
+    from core.decision.models import DecisionRecommendation
+    from core.impact.models import BusinessImpact
+    from core.impact.repository import InMemoryImpactRepository
+
+    store = IntelligenceStore()
+    impacts = InMemoryImpactRepository()
+    impacts.save(BusinessImpact(
+        id="impact-alias",
+        business_id="b1",
+        entity_id="b1",
+        signal_id="signal-alias",
+        factor_key="competitive_price",
+        magnitude=0.6,
+        exposure=0.8,
+        confidence=0.9,
+        rationale="competitive pressure",
+    ))
+    handlers = JobHandlers(store=store, impact_repository=impacts)
+    recommendation = DecisionRecommendation(
+        business_id="b1",
+        impact_id="impact-alias",
+        action="monitor_before_matching_price",
+        priority=0.7,
+        rationale="monitor before matching",
+        confidence=0.9,
+        signal_id="signal-alias",
+        factor_key="competitive_price",
+        policy_id="policy-v1",
+    )
+
+    result = handlers.dispatch_action(Job(
+        type=JobType.DISPATCH_ACTION,
+        payload={"recommendation": recommendation.model_dump(mode="json")},
+    ))
+
+    assert result["action"]["action"] == "monitor"
+    assert result["alert"]["recommended_action"] == "monitor"
+    assert ":monitor:" in result["alert"]["id"]
+    assert ":monitor_before_matching_price:" not in result["alert"]["id"]
+
+
 def test_analyze_reviews_returns_summary():
     handlers = JobHandlers()
     result = handlers.analyze_reviews(Job(type=JobType.ANALYZE_REVIEWS, payload={
