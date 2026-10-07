@@ -61,13 +61,27 @@ class JobWorker:
         if job.type == JobType.GENERATE_DECISION:
             recommendation = job.result.get("recommendation")
             if isinstance(recommendation, dict):
+                # Canonicalize policy aliases before deriving the action job identity.
+                # This keeps alias-equivalent recommendations idempotent end-to-end.
+                from core.action.dispatcher import ActionDispatcher
+                from core.decision.models import DecisionRecommendation
+
+                typed_recommendation = DecisionRecommendation.model_validate(recommendation)
+                canonical_action = ActionDispatcher().dispatch(typed_recommendation).action
+                canonical_recommendation = typed_recommendation.model_copy(
+                    update={"action": canonical_action}
+                ).model_dump(mode="json")
                 revision = sha256(
-                    json.dumps(recommendation, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                    json.dumps(
+                        canonical_recommendation,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
                 ).hexdigest()[:16]
                 return [Job(
                     type=JobType.DISPATCH_ACTION,
-                    payload={"recommendation": recommendation},
-                    idempotency_key=f"action:{recommendation.get('impact_id', job.id)}:{revision}",
+                    payload={"recommendation": canonical_recommendation},
+                    idempotency_key=f"action:{canonical_recommendation.get('impact_id', job.id)}:{revision}",
                 )]
         if job.type == JobType.DISPATCH_ACTION:
             action = job.result.get("action")
