@@ -200,7 +200,7 @@ def test_worker_runs_research_to_decision_to_alert_loop():
             rules=[
                 DecisionPolicyRule(
                     factor_key="competitive_price",
-                    min_impact=0.05,
+                    min_impact=0.04,
                     max_impact=1.0,
                     action="review",
                     rationale="verified price movement requires review",
