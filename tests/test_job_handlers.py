@@ -187,6 +187,15 @@ def test_dispatch_action_aliases_share_canonical_alert_identity():
     assert len(store.all_alerts()) == 1
 
 
+def test_ingest_research_requires_observation_repository():
+    handlers = JobHandlers()
+    with pytest.raises(RuntimeError, match="observation repository is not configured"):
+        handlers.ingest_research(Job(
+            type=JobType.INGEST_RESEARCH,
+            payload={"research": {"question": "q", "tasks": []}, "business_id": "b1"},
+        ))
+
+
 def test_ingest_research_assigns_distinct_ids_without_evidence_ids():
     from core.observation.repository import InMemoryObservationRepository
 
