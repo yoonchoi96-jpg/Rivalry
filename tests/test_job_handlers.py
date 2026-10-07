@@ -187,6 +187,39 @@ def test_dispatch_action_aliases_share_canonical_alert_identity():
     assert len(store.all_alerts()) == 1
 
 
+def test_ingest_research_assigns_distinct_ids_without_evidence_ids():
+    from core.observation.repository import InMemoryObservationRepository
+
+    observations = InMemoryObservationRepository()
+    handlers = JobHandlers(observation_repository=observations)
+    result = handlers.ingest_research(Job(
+        type=JobType.INGEST_RESEARCH,
+        payload={
+            "business_id": "b1",
+            "research": {
+                "question": "compare prices",
+                "tasks": [
+                    {
+                        "factor_key": "competitive_price",
+                        "source_id": "source-a",
+                        "evidence": {"statement": "price is 100", "captured_at": "2026-10-07T00:00:00Z"},
+                    },
+                    {
+                        "factor_key": "competitive_price",
+                        "source_id": "source-b",
+                        "evidence": {"statement": "price is 120", "captured_at": "2026-10-07T00:01:00Z"},
+                    },
+                ],
+            },
+        },
+    ))
+
+    assert result["observation_count"] == 2
+    assert result["observations"][0]["id"] != result["observations"][1]["id"]
+    assert observations.get(result["observations"][0]["id"]) is not None
+    assert observations.get(result["observations"][1]["id"]) is not None
+
+
 def test_analyze_reviews_returns_summary():
     handlers = JobHandlers()
     result = handlers.analyze_reviews(Job(type=JobType.ANALYZE_REVIEWS, payload={
