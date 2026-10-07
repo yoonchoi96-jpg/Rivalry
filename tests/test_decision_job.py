@@ -270,6 +270,68 @@ def test_worker_runs_research_to_decision_to_alert_loop():
     assert len(handlers.store.alerts) == 1
 
 
+
+def test_decision_research_action_dispatches_executable_follow_up():
+    from core.jobs.queue import InMemoryJobQueue
+    from core.jobs.worker import JobWorker
+
+    signals = InMemorySignalRepository()
+    signal = make_signal()
+    signals.save(signal)
+    impacts = InMemoryImpactRepository()
+    impact = make_impact()
+    impacts.save(impact)
+    policies = DecisionPolicyRegistry()
+    policies.register(
+        "policy-research-v1",
+        DecisionPolicy(
+            name="research",
+            default_action="monitor",
+            default_rationale="monitor",
+            rules=[
+                DecisionPolicyRule(
+                    factor_key="competitive_price",
+                    min_impact=0.2,
+                    max_impact=1.0,
+                    action="investigate",
+                    rationale="verify the competitive price signal",
+                )
+            ],
+        ),
+    )
+    handlers = JobHandlers(
+        impact_repository=impacts,
+        decision_policies=policies,
+        decision_recommendations=InMemoryDecisionRecommendationRepository(),
+        signal_repository=signals,
+    )
+
+    queue = InMemoryJobQueue()
+    queue.enqueue(
+        Job(
+            type=JobType.GENERATE_DECISION,
+            payload={"impact_id": impact.id, "policy_id": "policy-research-v1"},
+        )
+    )
+    worker = JobWorker(queue, handlers=handlers.registry(), retry_base_seconds=0)
+
+    completed = worker.drain(limit=2)
+
+    assert [job.type for job in completed] == [
+        JobType.GENERATE_DECISION,
+        JobType.DISPATCH_ACTION,
+    ]
+    dispatch = completed[-1]
+    assert dispatch.result["action"]["action"] == "investigate"
+    assert dispatch.result["action"]["kind"] == "research"
+    assert dispatch.result["action"]["follow_up_job"] == JobType.EXECUTE_RESEARCH.value
+    follow_up = worker._follow_up_jobs(dispatch)[0]
+    assert follow_up.type == JobType.EXECUTE_RESEARCH
+    assert follow_up.payload["business_id"] == impact.business_id
+    assert follow_up.payload["policy_id"] == "policy-research-v1"
+    assert follow_up.payload["exposure"] == impact.exposure
+    assert follow_up.payload["plan"]["tasks"][0]["factor_key"] == impact.factor_key
+
 def test_ingest_research_persists_observation_lineage():
     observations = InMemoryObservationRepository()
     handlers = JobHandlers(observation_repository=observations)
