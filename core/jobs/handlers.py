@@ -160,8 +160,15 @@ class JobHandlers:
             recommendation,
             exposure=impact.exposure if impact is not None else 0.5,
         )
+        canonical_recommendation = recommendation.model_copy(
+            update={"action": action.action}
+        )
         recommendation_revision = sha256(
-            json.dumps(recommendation.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(
+                canonical_recommendation.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
         ).hexdigest()[:16]
         alert = {
             "id": f"recommendation:{recommendation.impact_id}:{recommendation.policy_id or 'none'}:{action.action}:{recommendation_revision}",
