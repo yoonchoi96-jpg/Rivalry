@@ -74,6 +74,13 @@ class InMemoryJobQueue:
             self._pending.append(job.id)
             return job
 
+    def ack(self, job: Job) -> None:
+        with self._lock:
+            self._jobs.pop(job.id, None)
+            self._not_before.pop(job.id, None)
+            if job.idempotency_key and self._idempotency.get(job.idempotency_key) == job.id:
+                self._idempotency.pop(job.idempotency_key, None)
+
     def size(self) -> int:
         with self._lock:
             return sum(1 for job in self._jobs.values() if job.status == JobStatus.QUEUED)
