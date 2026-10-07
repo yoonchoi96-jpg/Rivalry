@@ -1,3 +1,5 @@
+import pytest
+
 from adapters.base import PlatformAdapter
 from adapters.registry import AdapterRegistry
 from core.jobs.handlers import JobHandlers
