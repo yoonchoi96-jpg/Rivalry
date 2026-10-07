@@ -212,7 +212,20 @@ class JobHandlers:
             observed_at = structured.get("observed_at") or evidence.get("captured_at")
             normalized = structured.get("normalized_value")
             observation = Observation(
-                id=sha256(str(evidence.get("id", "")).encode()).hexdigest()[:32],
+                id=sha256(
+                    json.dumps(
+                        {
+                            "evidence_id": evidence.get("id"),
+                            "business_id": entity_id,
+                            "factor_key": item.get("factor_key"),
+                            "source_id": item.get("source_id") or evidence.get("source_id"),
+                            "statement": evidence.get("statement"),
+                            "observed_at": observed_at,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()[:32],
                 entity_id=entity_id,
                 entity_type="business",
                 metric=str(item.get("factor_key") or "research_evidence"),
