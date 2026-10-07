@@ -1,6 +1,7 @@
 from core.action.dispatcher import ActionDispatcher
 from core.action.models import ActionKind
 from core.decision.models import DecisionRecommendation
+from core.jobs.models import JobType
 
 
 def make_recommendation(action: str) -> DecisionRecommendation:
@@ -42,6 +43,15 @@ def test_research_action_builds_executable_follow_up_plan():
 def test_research_action_preserves_impact_exposure():
     action = ActionDispatcher().dispatch(make_recommendation("investigate"), exposure=0.83)
     assert action.follow_up_payload["exposure"] == 0.83
+
+
+def test_action_aliases_are_canonicalized():
+    action = ActionDispatcher().dispatch(
+        make_recommendation(" investigate_competitor_pricing ")
+    )
+    assert action.action == "investigate"
+    assert action.kind == ActionKind.RESEARCH
+    assert action.follow_up_job == JobType.EXECUTE_RESEARCH
 
 
 def test_unknown_action_defaults_to_safe_alert():
