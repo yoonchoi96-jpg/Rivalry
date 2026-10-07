@@ -112,6 +112,25 @@ def test_legacy_follow_ups_have_deterministic_idempotency_keys():
     ]
 
 
+def test_decision_action_idempotency_is_revision_aware():
+    worker = JobWorker(InMemoryJobQueue())
+    parent = Job(
+        type=JobType.GENERATE_DECISION,
+        result={"recommendation": {
+            "business_id": "b1", "impact_id": "i1", "action": "review",
+            "priority": 0.8, "rationale": "review now", "confidence": 0.9,
+            "signal_id": "s1", "factor_key": "competitive_price", "policy_id": "p1",
+        }},
+        status=JobStatus.SUCCEEDED,
+    )
+    first = worker._follow_up_jobs(parent)[0]
+    revised = parent.model_copy(deep=True)
+    revised.result["recommendation"]["rationale"] = "review after verification"
+    second = worker._follow_up_jobs(revised)[0]
+
+    assert first.idempotency_key != second.idempotency_key
+
+
 def test_process_intelligence_follow_up_has_deterministic_idempotency_key():
     worker = JobWorker(InMemoryJobQueue())
     parent = Job(
