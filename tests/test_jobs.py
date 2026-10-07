@@ -187,3 +187,29 @@ def test_worker_enqueues_follow_up_before_ack():
 
     assert completed.status == JobStatus.SUCCEEDED
     assert queue.ack_seen_with_follow_up
+
+
+def test_decision_action_idempotency_normalizes_action_aliases():
+    worker = JobWorker(InMemoryJobQueue())
+    base = {
+        "business_id": "b1", "impact_id": "i-alias", "priority": 0.8,
+        "rationale": "investigate price pressure", "confidence": 0.9,
+        "signal_id": "s1", "factor_key": "competitive_price", "policy_id": "p1",
+    }
+    canonical = Job(
+        type=JobType.GENERATE_DECISION,
+        result={"recommendation": {**base, "action": "investigate"}},
+        status=JobStatus.SUCCEEDED,
+    )
+    alias = Job(
+        type=JobType.GENERATE_DECISION,
+        result={"recommendation": {**base, "action": "research"}},
+        status=JobStatus.SUCCEEDED,
+    )
+
+    first = worker._follow_up_jobs(canonical)[0]
+    second = worker._follow_up_jobs(alias)[0]
+
+    assert first.idempotency_key == second.idempotency_key
+    assert first.payload["recommendation"]["action"] == "investigate"
+    assert second.payload["recommendation"]["action"] == "investigate"
