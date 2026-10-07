@@ -408,4 +408,5 @@ def test_research_observation_reprocessing_builds_measurement_signal_and_impact(
     assert result["measurement"]["value"] == 0.1
     assert result["signal"]["delta_pct"] == 10.0
     assert result["impact"]["measurement_ids"] == [result["measurement"]["id"]]
+    assert result["impact"]["exposure"] == 0.5
     assert result["policy_id"] == "policy-v1"
