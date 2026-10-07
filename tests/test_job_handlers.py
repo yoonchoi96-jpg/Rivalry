@@ -320,3 +320,34 @@ def test_two_stores_share_repository_state():
     )
     first.record_changes([change])
     assert [item.id for item in second.competitor_history("c-shared")] == ["shared-change"]
+
+def test_ingest_research_rejects_non_list_tasks():
+    from core.observation.repository import InMemoryObservationRepository
+
+    handlers = JobHandlers(observation_repository=InMemoryObservationRepository())
+    with pytest.raises(ValueError, match="tasks to be a list"):
+        handlers.ingest_research(Job(
+            type=JobType.INGEST_RESEARCH,
+            payload={"business_id": "b1", "research": {"question": "q", "tasks": {}}},
+        ))
+
+
+def test_ingest_research_rejects_evidence_without_timestamp():
+    from core.observation.repository import InMemoryObservationRepository
+
+    handlers = JobHandlers(observation_repository=InMemoryObservationRepository())
+    with pytest.raises(ValueError, match="requires observed_at or captured_at"):
+        handlers.ingest_research(Job(
+            type=JobType.INGEST_RESEARCH,
+            payload={
+                "business_id": "b1",
+                "research": {
+                    "question": "q",
+                    "tasks": [{
+                        "factor_key": "competitive_price",
+                        "source_id": "source-a",
+                        "evidence": {"statement": "price is 100"},
+                    }],
+                },
+            },
+        ))
