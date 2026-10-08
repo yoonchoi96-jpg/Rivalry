@@ -169,7 +169,16 @@ class JobWorker:
             if handler is None:
                 raise ValueError(f"No handler registered for job type: {job.type.value}")
             job.result = handler(job) or {}
+
+            # Keep the durable parent RUNNING until every follow-up has been
+            # durably enqueued. If a follow-up enqueue crashes halfway through,
+            # the parent remains reclaimable and deterministic child identities
+            # make already-enqueued follow-ups safe to repeat. Marking the
+            # parent SUCCEEDED before this loop could cause Redis redelivery
+            # fencing to ACK it and permanently lose the remaining children.
             job.status = JobStatus.SUCCEEDED
+            for follow_up in self._follow_up_jobs(job):
+                self.queue.enqueue(follow_up)
             job.error = None
         except Exception as exc:
             job.status = JobStatus.FAILED
@@ -178,8 +187,6 @@ class JobWorker:
             if job.status == JobStatus.SUCCEEDED:
                 job.finished_at = datetime.now(timezone.utc).isoformat()
                 self.queue.update(job)
-                for follow_up in self._follow_up_jobs(job):
-                    self.queue.enqueue(follow_up)
                 self._ack(job)
             elif job.error and job.error.startswith("No handler registered"):
                 job.finished_at = datetime.now(timezone.utc).isoformat()
