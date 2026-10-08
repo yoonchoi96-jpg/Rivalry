@@ -1,4 +1,5 @@
 import os
+from uuid import uuid4
 
 import pytest
 
@@ -17,7 +18,7 @@ def test_postgres_job_store_prepare_enqueue_is_idempotent_and_revision_aware():
     migrate(dsn)
     store = PostgresJobStore(dsn)
 
-    key = "postgres-store-regression"
+    key = f"postgres-store-regression:{uuid4()}"
     first = store.prepare_enqueue(Job(
         type=JobType.DISPATCH_ACTION,
         payload={"revision": 1},
