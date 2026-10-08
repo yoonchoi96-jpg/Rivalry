@@ -97,9 +97,18 @@ def test_postgres_round_trip_when_database_is_configured():
         "competitor_id": "integration-c1",
         "recommended_action": "monitor",
     })
+    repository.record_alert({
+        "id": "integration-alert",
+        "change_id": "integration-change",
+        "competitor_id": "integration-c1",
+        "recommended_action": "review",
+    })
 
     assert repository.all_changes()[0].id == change.id
     assert repository.all_reviews()[0].product_id == "p1"
     assert repository.all_predictions()[0].evidence_change_ids == ["integration-change"]
     assert repository.latest_snapshot("integration-c1") == {"prices": [110]}
-    assert repository.all_alerts()[0]["id"] == "integration-alert"
+    alerts = repository.all_alerts()
+    assert len(alerts) == 1
+    assert alerts[0]["id"] == "integration-alert"
+    assert alerts[0]["recommended_action"] == "review"

@@ -34,6 +34,8 @@ class MeasurementEngine:
             raise ValueError("current and reference observations must share a unit")
         if current.currency != reference.currency:
             raise ValueError("current and reference observations must share a currency")
+        if reference.normalized_value == 0:
+            raise ValueError("reference observation normalized value must not be zero")
 
         value = round(current.normalized_value / reference.normalized_value - 1, 12)
         confidence = min(current.confidence, reference.confidence)

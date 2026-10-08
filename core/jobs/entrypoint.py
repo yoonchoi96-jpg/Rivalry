@@ -16,6 +16,8 @@ from .runtime import (
     job_queue,
     signal_repository,
     source_repository,
+    observation_repository,
+    measurement_repository,
 )
 from .worker import JobWorker
 
@@ -41,6 +43,8 @@ def run_worker(*, poll_interval: float | None = None) -> None:
         decision_policies=decision_policy_registry,
         decision_recommendations=decision_recommendation_repository,
         signal_repository=signal_repository,
+        observation_repository=observation_repository,
+        measurement_repository=measurement_repository,
     )
     handlers_obj.research = research
     handlers = handlers_obj.registry()

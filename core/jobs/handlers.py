@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -17,6 +18,13 @@ from core.decision.engine import DecisionEngine
 from core.decision.models import DecisionPolicy, DecisionRecommendation
 from core.decision.recommendation_repository import InMemoryDecisionRecommendationRepository
 from core.impact.repository import InMemoryImpactRepository
+from core.action.dispatcher import ActionDispatcher
+from core.measurement.engine import MeasurementEngine
+from core.measurement.registry import MeasurementRegistry, DEFAULT_MEASUREMENTS
+from core.impact.scorer import build_business_impact
+from core.evidence.models import AccessMethod, KnowledgeKind
+from core.observation.models import Observation
+from hashlib import sha256
 
 from .models import Job, JobType
 from .pipeline import detect_changes, normalize_collection
@@ -25,7 +33,7 @@ from .pipeline import detect_changes, normalize_collection
 class JobHandlers:
     """Application handlers kept independent from the queue implementation."""
 
-    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None, research: ResearchExecutor | None = None, impact_repository=None, decision_policies=None, decision_recommendations=None, signal_repository=None) -> None:
+    def __init__(self, intelligence: IntelligenceService | None = None, adapters: AdapterRegistry | None = None, recommendations: RecommendationService | None = None, reviews: ReviewIntelligenceService | None = None, store: IntelligenceStore | None = None, research: ResearchExecutor | None = None, impact_repository=None, decision_policies=None, decision_recommendations=None, signal_repository=None, observation_repository=None, measurement_repository=None) -> None:
         self.intelligence = intelligence or IntelligenceService()
         self.adapters = adapters or AdapterRegistry()
         if adapters is None:
@@ -39,6 +47,8 @@ class JobHandlers:
         self.decision_policies = decision_policies
         self.decision_recommendations = decision_recommendations or InMemoryDecisionRecommendationRepository()
         self.signal_repository = signal_repository
+        self.observation_repository = observation_repository
+        self.measurement_repository = measurement_repository
 
 
     def collect_competitor(self, job: Job) -> dict[str, object]:
@@ -140,6 +150,153 @@ class JobHandlers:
         stored = self.decision_recommendations.save(recommendation)
         return {"recommendation": stored.model_dump(mode="json")}
 
+    def dispatch_action(self, job: Job) -> dict[str, object]:
+        raw = job.payload.get("recommendation")
+        if not isinstance(raw, dict):
+            raise ValueError("dispatch_action requires payload.recommendation")
+        recommendation = DecisionRecommendation.model_validate(raw)
+        impact = self.impact_repository.get(recommendation.impact_id)
+        action = ActionDispatcher().dispatch(
+            recommendation,
+            exposure=impact.exposure if impact is not None else 0.5,
+        )
+        canonical_recommendation = recommendation.model_copy(
+            update={"action": action.action}
+        )
+        recommendation_revision = sha256(
+            json.dumps(
+                canonical_recommendation.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()[:16]
+        alert = {
+            "id": f"recommendation:{recommendation.impact_id}:{recommendation.policy_id or 'none'}:{action.action}:{recommendation_revision}",
+            "change_id": recommendation.impact_id,
+            "competitor_id": recommendation.business_id,
+            "type": "DECISION_RECOMMENDATION",
+            "impact_score": round((abs(impact.magnitude) * impact.exposure * impact.significance * 100), 10) if impact is not None else round(recommendation.priority * 100, 10),
+            "confidence": recommendation.confidence * 100,
+            "summary": recommendation.rationale,
+            "likely_cause": recommendation.factor_key,
+            "recommended_action": action.action,
+            "action_kind": action.kind.value,
+            "recommendation_id": action.recommendation_id,
+            "signal_id": action.signal_id,
+            "policy_id": action.policy_id,
+            "recommendation_revision": recommendation_revision,
+            "follow_up_job": action.follow_up_job.value if action.follow_up_job else None,
+        }
+        self.store.record_alert(alert)
+        return {"action": action.model_dump(mode="json"), "alert": alert}
+
+
+    @staticmethod
+    def _measurement_definition(factor_key: str) -> str:
+        aliases = {"competitive_price": "competitive_price_pressure", "price": "competitive_price_pressure", "fx_rate": "fx_exposure"}
+        return aliases.get(factor_key, factor_key)
+
+    def ingest_research(self, job: Job) -> dict[str, object]:
+        raw = job.payload.get("research")
+        if not isinstance(raw, dict):
+            raise ValueError("ingest_research requires payload.research")
+        if self.observation_repository is None:
+            raise RuntimeError("observation repository is not configured")
+        tasks = raw.get("tasks", [])
+        if not isinstance(tasks, list):
+            raise ValueError("ingest_research requires payload.research.tasks to be a list")
+        observations = []
+        for task_index, item in enumerate(tasks):
+            if not isinstance(item, dict) or not isinstance(item.get("evidence"), dict):
+                continue
+            evidence = item["evidence"]
+            entity_id = str(job.payload.get("business_id") or "")
+            if not entity_id:
+                continue
+            structured = evidence.get("observation") if isinstance(evidence.get("observation"), dict) else {}
+            observed_at = structured.get("observed_at") or evidence.get("captured_at")
+            if not observed_at:
+                raise ValueError("research evidence requires observed_at or captured_at")
+            normalized = structured.get("normalized_value")
+            observation = Observation(
+                id=sha256(
+                    json.dumps(
+                        {
+                            "task_index": task_index,
+                            "evidence_id": evidence.get("id"),
+                            "business_id": entity_id,
+                            "factor_key": item.get("factor_key"),
+                            "source_id": item.get("source_id") or evidence.get("source_id"),
+                            "statement": evidence.get("statement"),
+                            "observed_at": observed_at,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()[:32],
+                entity_id=entity_id,
+                entity_type="business",
+                metric=str(item.get("factor_key") or "research_evidence"),
+                raw_value=structured.get("raw_value", evidence.get("statement")),
+                normalized_value=float(normalized) if isinstance(normalized, (int, float)) else None,
+                unit=str(structured.get("unit")) if structured.get("unit") else None,
+                currency=str(structured.get("currency")) if structured.get("currency") else None,
+                geography=str(structured.get("geography")) if structured.get("geography") else None,
+                observed_at=str(observed_at or ""),
+                source_id=str(item.get("source_id") or evidence.get("source_id") or ""),
+                evidence_id=str(evidence.get("id") or ""),
+                access_method=AccessMethod.WEB,
+                confidence=float(evidence.get("confidence", 0.5)),
+                knowledge_kind=KnowledgeKind.FACT,
+                provenance={"research_question": raw.get("question"), "research_factor": item.get("factor_key"), "measurement_definition": self._measurement_definition(str(item.get("factor_key") or "")), "structured": bool(structured)},
+            )
+            self.observation_repository.save(observation)
+            observations.append(observation.model_dump(mode="json"))
+        return {"observations": observations, "observation_count": len(observations)}
+
+    def reprocess_observation(self, job: Job) -> dict[str, object]:
+        if self.observation_repository is None:
+            raise RuntimeError("observation repository is not configured")
+        raw = job.payload.get("observation")
+        if not isinstance(raw, dict):
+            raise ValueError("reprocess_observation requires payload.observation")
+        current = Observation.model_validate(raw)
+        if current.normalized_value is None:
+            return {"measurement": None, "signal": None, "reason": "observation has no normalized value"}
+        reference = self.observation_repository.latest_for_entity_metric(
+            current.entity_id, current.metric, exclude_id=current.id
+        )
+        if reference is None or reference.normalized_value is None:
+            return {"measurement": None, "signal": None, "reason": "no comparable reference observation"}
+        definition_key = current.provenance.get("measurement_definition") if isinstance(current.provenance, dict) else None
+        definition_key = str(definition_key or current.metric)
+        measurement, signal = MeasurementEngine(MeasurementRegistry(DEFAULT_MEASUREMENTS)).measure_change(
+            definition_key, current, reference
+        )
+        if self.signal_repository is None:
+            raise RuntimeError("signal repository is not configured")
+        self.signal_repository.save(signal)
+        impact = build_business_impact(
+            id=sha256(f"research-impact:{signal.id}".encode()).hexdigest()[:32],
+            business_id=str(job.payload.get("business_id") or current.entity_id),
+            signal=signal,
+            factor_key=current.metric,
+            exposure=float(job.payload.get("exposure", 0.5)),
+            magnitude=measurement.value,
+            rationale=f"Research observation changed versus reference: {measurement.value:.4f}",
+        )
+        self.impact_repository.save(impact)
+        measurement_repository = getattr(self, "measurement_repository", None)
+        if measurement_repository is not None:
+            measurement_repository.save(measurement)
+        return {
+            "measurement": measurement.model_dump(mode="json"),
+            "signal": signal.model_dump(mode="json"),
+            "reference_observation_id": reference.id,
+            "impact": impact.model_dump(mode="json"),
+            "policy_id": job.payload.get("policy_id"),
+        }
+
     def execute_research(self, job: Job) -> dict[str, object]:
         if self.research is None:
             raise RuntimeError("research executor is not configured")
@@ -150,4 +307,4 @@ class JobHandlers:
         return self.research.execute(ResearchPlan.model_validate(plan))
 
     def registry(self) -> dict[JobType, Any]:
-        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.GENERATE_DECISION: self.generate_decision}
+        return {JobType.COLLECT_COMPETITOR: self.collect_competitor, JobType.PROCESS_INTELLIGENCE: self.process_intelligence, JobType.BUILD_ALERT: self.build_alert, JobType.ANALYZE_REVIEWS: self.analyze_reviews, JobType.GENERATE_PREDICTION: self.generate_prediction, JobType.EXECUTE_RESEARCH: self.execute_research, JobType.INGEST_RESEARCH: self.ingest_research, JobType.REPROCESS_OBSERVATION: self.reprocess_observation, JobType.GENERATE_DECISION: self.generate_decision, JobType.DISPATCH_ACTION: self.dispatch_action}

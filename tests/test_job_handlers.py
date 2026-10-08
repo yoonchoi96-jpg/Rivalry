@@ -1,3 +1,5 @@
+import pytest
+
 from adapters.base import PlatformAdapter
 from adapters.registry import AdapterRegistry
 from core.jobs.handlers import JobHandlers
@@ -67,6 +69,167 @@ def test_build_alert_returns_actionable_alert():
     result = handlers.build_alert(Job(type=JobType.BUILD_ALERT, payload={"change": change, "intelligence": intelligence}))
     assert result["likely_cause"] == "cost"
     assert result["recommended_action"] == "monitor_before_matching_price"
+
+
+def test_dispatch_action_preserves_recommendation_revision_in_alert_identity():
+    from core.decision.models import DecisionRecommendation
+    from core.impact.models import BusinessImpact
+    from core.impact.repository import InMemoryImpactRepository
+
+    store = IntelligenceStore()
+    impacts = InMemoryImpactRepository()
+    impact = BusinessImpact(
+        id="impact-1",
+        business_id="b1",
+        entity_id="b1",
+        signal_id="signal-1",
+        factor_key="competitive_price",
+        magnitude=0.8,
+        exposure=0.75,
+        confidence=0.9,
+        rationale="competitive pressure",
+    )
+    impacts.save(impact)
+    handlers = JobHandlers(store=store, impact_repository=impacts)
+
+    recommendation = DecisionRecommendation(
+        business_id="b1",
+        impact_id="impact-1",
+        action="review",
+        priority=0.8,
+        rationale="review now",
+        confidence=0.9,
+        signal_id="signal-1",
+        factor_key="competitive_price",
+        policy_id="policy-v1",
+    )
+    first = handlers.dispatch_action(Job(
+        type=JobType.DISPATCH_ACTION,
+        payload={"recommendation": recommendation.model_dump(mode="json")},
+    ))
+    revised = recommendation.model_copy(update={"rationale": "review after verification"})
+    second = handlers.dispatch_action(Job(
+        type=JobType.DISPATCH_ACTION,
+        payload={"recommendation": revised.model_dump(mode="json")},
+    ))
+
+    assert first["alert"]["id"] != second["alert"]["id"]
+    assert first["alert"]["recommendation_revision"] != second["alert"]["recommendation_revision"]
+    assert len(store.all_alerts()) == 2
+
+
+def test_dispatch_action_persists_canonical_action_for_alias():
+    from core.decision.models import DecisionRecommendation
+    from core.impact.models import BusinessImpact
+    from core.impact.repository import InMemoryImpactRepository
+
+    store = IntelligenceStore()
+    impacts = InMemoryImpactRepository()
+    impacts.save(BusinessImpact(
+        id="impact-alias",
+        business_id="b1",
+        entity_id="b1",
+        signal_id="signal-alias",
+        factor_key="competitive_price",
+        magnitude=0.6,
+        exposure=0.8,
+        confidence=0.9,
+        rationale="competitive pressure",
+    ))
+    handlers = JobHandlers(store=store, impact_repository=impacts)
+    recommendation = DecisionRecommendation(
+        business_id="b1",
+        impact_id="impact-alias",
+        action="monitor_before_matching_price",
+        priority=0.7,
+        rationale="monitor before matching",
+        confidence=0.9,
+        signal_id="signal-alias",
+        factor_key="competitive_price",
+        policy_id="policy-v1",
+    )
+
+    result = handlers.dispatch_action(Job(
+        type=JobType.DISPATCH_ACTION,
+        payload={"recommendation": recommendation.model_dump(mode="json")},
+    ))
+
+    assert result["action"]["action"] == "monitor"
+    assert result["alert"]["recommended_action"] == "monitor"
+    assert ":monitor:" in result["alert"]["id"]
+    assert ":monitor_before_matching_price:" not in result["alert"]["id"]
+    assert result["alert"]["impact_score"] == 24.0
+
+
+def test_dispatch_action_aliases_share_canonical_alert_identity():
+    from core.decision.models import DecisionRecommendation
+    from core.impact.models import BusinessImpact
+    from core.impact.repository import InMemoryImpactRepository
+
+    store = IntelligenceStore()
+    impacts = InMemoryImpactRepository()
+    impacts.save(BusinessImpact(
+        id="impact-alias-identity", business_id="b1", entity_id="b1",
+        signal_id="signal-alias", factor_key="competitive_price",
+        magnitude=0.6, exposure=0.8, confidence=0.9, rationale="pressure",
+    ))
+    handlers = JobHandlers(store=store, impact_repository=impacts)
+    base = dict(
+        business_id="b1", impact_id="impact-alias-identity", priority=0.7,
+        rationale="monitor before matching", confidence=0.9,
+        signal_id="signal-alias", factor_key="competitive_price", policy_id="policy-v1",
+    )
+    canonical = DecisionRecommendation(action="monitor", **base)
+    alias = DecisionRecommendation(action="watch", **base)
+
+    first = handlers.dispatch_action(Job(type=JobType.DISPATCH_ACTION, payload={"recommendation": canonical.model_dump(mode="json")}))
+    second = handlers.dispatch_action(Job(type=JobType.DISPATCH_ACTION, payload={"recommendation": alias.model_dump(mode="json")}))
+
+    assert first["alert"]["id"] == second["alert"]["id"]
+    assert first["alert"]["recommendation_revision"] == second["alert"]["recommendation_revision"]
+    assert len(store.all_alerts()) == 1
+
+
+def test_ingest_research_requires_observation_repository():
+    handlers = JobHandlers()
+    with pytest.raises(RuntimeError, match="observation repository is not configured"):
+        handlers.ingest_research(Job(
+            type=JobType.INGEST_RESEARCH,
+            payload={"research": {"question": "q", "tasks": []}, "business_id": "b1"},
+        ))
+
+
+def test_ingest_research_assigns_distinct_ids_without_evidence_ids():
+    from core.observation.repository import InMemoryObservationRepository
+
+    observations = InMemoryObservationRepository()
+    handlers = JobHandlers(observation_repository=observations)
+    result = handlers.ingest_research(Job(
+        type=JobType.INGEST_RESEARCH,
+        payload={
+            "business_id": "b1",
+            "research": {
+                "question": "compare prices",
+                "tasks": [
+                    {
+                        "factor_key": "competitive_price",
+                        "source_id": "source-a",
+                        "evidence": {"statement": "price is 100", "captured_at": "2026-10-07T00:00:00Z"},
+                    },
+                    {
+                        "factor_key": "competitive_price",
+                        "source_id": "source-b",
+                        "evidence": {"statement": "price is 120", "captured_at": "2026-10-07T00:01:00Z"},
+                    },
+                ],
+            },
+        },
+    ))
+
+    assert result["observation_count"] == 2
+    assert result["observations"][0]["id"] != result["observations"][1]["id"]
+    assert observations.get(result["observations"][0]["id"]) is not None
+    assert observations.get(result["observations"][1]["id"]) is not None
 
 
 def test_analyze_reviews_returns_summary():
@@ -158,3 +321,34 @@ def test_two_stores_share_repository_state():
     )
     first.record_changes([change])
     assert [item.id for item in second.competitor_history("c-shared")] == ["shared-change"]
+
+def test_ingest_research_rejects_non_list_tasks():
+    from core.observation.repository import InMemoryObservationRepository
+
+    handlers = JobHandlers(observation_repository=InMemoryObservationRepository())
+    with pytest.raises(ValueError, match="tasks to be a list"):
+        handlers.ingest_research(Job(
+            type=JobType.INGEST_RESEARCH,
+            payload={"business_id": "b1", "research": {"question": "q", "tasks": {}}},
+        ))
+
+
+def test_ingest_research_rejects_evidence_without_timestamp():
+    from core.observation.repository import InMemoryObservationRepository
+
+    handlers = JobHandlers(observation_repository=InMemoryObservationRepository())
+    with pytest.raises(ValueError, match="requires observed_at or captured_at"):
+        handlers.ingest_research(Job(
+            type=JobType.INGEST_RESEARCH,
+            payload={
+                "business_id": "b1",
+                "research": {
+                    "question": "q",
+                    "tasks": [{
+                        "factor_key": "competitive_price",
+                        "source_id": "source-a",
+                        "evidence": {"statement": "price is 100"},
+                    }],
+                },
+            },
+        ))

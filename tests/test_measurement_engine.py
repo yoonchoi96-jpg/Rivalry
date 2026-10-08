@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from core.measurement.engine import MeasurementEngine
 from core.measurement.registry import DEFAULT_MEASUREMENTS, MeasurementRegistry
 from core.observation.models import AccessMethod, Observation
@@ -20,6 +22,16 @@ def observation(id, value):
         access_method=AccessMethod.API,
         confidence=.9,
     )
+
+
+def test_measurement_engine_rejects_zero_reference_value():
+    engine = MeasurementEngine(MeasurementRegistry(DEFAULT_MEASUREMENTS))
+    with pytest.raises(ValueError, match="reference observation normalized value must not be zero"):
+        engine.measure_change(
+            "competitive_price_pressure",
+            observation("current", 110),
+            observation("reference", 0),
+        )
 
 
 def test_measurement_engine_preserves_lineage_and_emits_change_signal():

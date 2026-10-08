@@ -42,7 +42,15 @@ class InMemoryIntelligenceRepository:
         self.predictions.append(Prediction.model_validate(prediction.model_dump(mode="json")))
 
     def record_alert(self, alert: dict[str, object]) -> None:
-        self.alerts.append(dict(alert))
+        stored = dict(alert)
+        alert_id = str(stored.get("id") or stored.get("change_id") or "")
+        if alert_id:
+            for index, existing in enumerate(self.alerts):
+                existing_id = str(existing.get("id") or existing.get("change_id") or "")
+                if existing_id == alert_id:
+                    self.alerts[index] = stored
+                    return
+        self.alerts.append(stored)
 
     def record_snapshot(self, competitor_id: str, snapshot: dict[str, object]) -> None:
         self.snapshots[competitor_id] = dict(snapshot)

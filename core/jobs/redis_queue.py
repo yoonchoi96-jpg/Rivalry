@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 from typing import Any
 
 from .models import Job, JobStatus
@@ -34,7 +33,6 @@ class RedisJobQueue:
         self.group = group
         self.consumer = consumer
         self.reclaim_after_ms = reclaim_after_ms
-        self.delayed_key = f"{stream}:delayed"
         self.dead_letter_stream = f"{stream}:dead-letter"
         self.idempotency_prefix = f"{stream}:idempotency:"
         self._message_ids: dict[str, str] = {}
@@ -92,37 +90,42 @@ class RedisJobQueue:
         return published
 
     def enqueue(self, job: Job) -> Job:
+        # PostgreSQL/InMemory job state is the idempotency authority. Do not
+        # claim a Redis-only marker before durable preparation: a crash in
+        # that gap could permanently suppress the job from the outbox.
         if job.idempotency_key:
             existing = self.job_store.get_by_idempotency_key(job.idempotency_key)
             if existing is not None:
+                # Public enqueue is idempotent even when the caller reuses the
+                # same Job object. Retries use requeue()/_enqueue_existing()
+                # explicitly, so they can advance enqueue_version safely.
                 return existing
-            claimed = self.client.set(
-                f"{self.idempotency_prefix}{job.idempotency_key}",
-                job.id,
-                nx=True,
-            )
-            if not claimed:
-                return self.job_store.get_by_idempotency_key(job.idempotency_key) or job
-
         return self._enqueue_existing(job)
 
-    def _decode_entry(self, entry: tuple[str, dict[str, str]]) -> Job:
+    def _decode_entry(self, entry: tuple[str, dict[str, str]]) -> Job | None:
         message_id, fields = entry
-        job = Job.model_validate(json.loads(fields["job"]))
-        self._message_ids[job.id] = message_id
-        return self.job_store.get(job.id) or job
+        queued_job = Job.model_validate(json.loads(fields["job"]))
+        current_job = self.job_store.get(queued_job.id)
 
-    def _promote_due(self) -> None:
-        now = time.time()
-        due = self.client.zrangebyscore(self.delayed_key, 0, now)
-        for raw in due:
-            job = Job.model_validate(json.loads(raw))
-            self.client.zrem(self.delayed_key, raw)
-            self._enqueue_existing(job)
+        # Requeue/retry creates a newer enqueue_version while the original
+        # Redis Streams delivery may remain pending. Never execute stale
+        # deliveries: acknowledge them and let the newer entry win.
+        if current_job is not None and queued_job.enqueue_version < current_job.enqueue_version:
+            self.client.xack(self.stream, self.group, message_id)
+            return None
+
+        # A successful durable state can remain pending if the worker crashes
+        # after follow-up enqueue but before ACK. The follow-up is already
+        # idempotent, so never execute the completed parent handler again.
+        if current_job is not None and current_job.status == JobStatus.SUCCEEDED:
+            self.client.xack(self.stream, self.group, message_id)
+            return None
+
+        self._message_ids[queued_job.id] = message_id
+        return current_job or queued_job
 
     def dequeue(self) -> Job | None:
         self.reconcile_outbox()
-        self._promote_due()
 
         xautoclaim = getattr(self.client, "xautoclaim", None)
         if callable(xautoclaim):
@@ -136,19 +139,26 @@ class RedisJobQueue:
             )
             entries = claimed[1] if isinstance(claimed, tuple) else []
             if entries:
-                return self._decode_entry(entries[0])
+                job = self._decode_entry(entries[0])
+                if job is not None:
+                    return job
 
-        messages = self.client.xreadgroup(
-            self.group,
-            self.consumer,
-            {self.stream: ">"},
-            count=1,
-            block=1000,
-        )
-        if not messages:
-            return None
-        _, entries = messages[0]
-        return self._decode_entry(entries[0])
+        # A stale entry may be encountered first. Keep reading until a
+        # current delivery is found rather than exposing the stale message.
+        while True:
+            messages = self.client.xreadgroup(
+                self.group,
+                self.consumer,
+                {self.stream: ">"},
+                count=1,
+                block=1000,
+            )
+            if not messages:
+                return None
+            _, entries = messages[0]
+            job = self._decode_entry(entries[0])
+            if job is not None:
+                return job
 
     def get(self, job_id: str) -> Job | None:
         return self.job_store.get(job_id)
@@ -186,16 +196,36 @@ class RedisJobQueue:
 
     def requeue(self, job: Job, *, delay_seconds: float = 0) -> Job:
         if delay_seconds <= 0:
+            # Publish the replacement before acknowledging the current
+            # delivery. If the worker crashes between these operations, the
+            # original delivery remains reclaimable and enqueue_version makes
+            # it stale once the replacement exists.
+            replacement = self._enqueue_existing(job)
             self.ack(job)
-            return self._enqueue_existing(job)
+            return replacement
+
+        from datetime import datetime, timedelta, timezone
+
         job.status = JobStatus.QUEUED
         job.enqueue_version += 1
-        self.job_store.save(job)
-        self.client.zadd(
-            self.delayed_key,
-            {json.dumps(job.model_dump(mode="json"), sort_keys=True): time.time() + delay_seconds},
-        )
-        return job
+        job.next_attempt_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+        ).isoformat()
+
+        # Delayed retries are durable in the same PostgreSQL outbox as normal
+        # enqueues. The outbox publisher only releases jobs once
+        # next_attempt_at is due, so a crash cannot lose the scheduled retry.
+        prepare = getattr(self.job_store, "prepare_enqueue", None)
+        if callable(prepare):
+            replacement = prepare(job)
+        else:
+            replacement = self.job_store.save(job)
+
+        # The retry is now durably recorded with a newer enqueue_version.
+        # A crash before this ACK leaves the original delivery reclaimable,
+        # but _decode_entry will recognize it as stale.
+        self.ack(job)
+        return replacement
 
     def metrics(self) -> dict[str, int]:
         """Return Redis-backed queue state metrics for operational monitoring."""
@@ -207,8 +237,8 @@ class RedisJobQueue:
                 pending = int(summary.get("pending", 0))
             elif isinstance(summary, (tuple, list)) and summary:
                 pending = int(summary[0])
-        zcard = getattr(self.client, "zcard", None)
-        delayed = int(zcard(self.delayed_key)) if callable(zcard) else 0
+        scheduled = getattr(self.job_store, "count_scheduled", None)
+        delayed = int(scheduled()) if callable(scheduled) else 0
         return {
             "stream_total": int(self.client.xlen(self.stream)),
             "pending": pending,
