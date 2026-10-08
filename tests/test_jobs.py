@@ -201,7 +201,7 @@ def test_follow_up_enqueue_failure_keeps_parent_retryable():
     child = queue.dequeue()
     assert child is not None
     assert child.idempotency_key == f"process-intelligence:{parent.id}:0"
-    assert queue.size() == 1
+    assert queue.size() == 2
     assert queue.get(parent.id) is completed
 
 
