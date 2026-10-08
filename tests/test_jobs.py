@@ -163,6 +163,44 @@ def test_research_ingest_follow_up_is_idempotent():
     assert follow_ups[0].idempotency_key == "reprocess:obs-1:p1"
 
 
+def test_follow_up_enqueue_failure_keeps_parent_retryable():
+    class FailOnceOnSecondFollowUp(InMemoryJobQueue):
+        def __init__(self):
+            super().__init__()
+            self._enqueue_calls = 0
+
+        def enqueue(self, job):
+            self._enqueue_calls += 1
+            if self._enqueue_calls == 3:
+                raise RuntimeError("simulated follow-up enqueue crash")
+            return super().enqueue(job)
+
+    queue = FailOnceOnSecondFollowUp()
+    parent = queue.enqueue(Job(
+        type=JobType.COLLECT_COMPETITOR,
+        result={},
+        max_attempts=2,
+    ))
+    # The parent enqueue is call #1. The worker's two children are #2 and #3.
+    worker = JobWorker(queue)
+
+    # Supply the successful collection result directly through the handler.
+    worker.handlers[JobType.COLLECT_COMPETITOR] = lambda _: {
+        "changes": [{"id": "c1"}, {"id": "c2"}],
+        "competitor": {"id": "comp-1"},
+    }
+
+    completed = worker.run_once()
+
+    assert completed.status == JobStatus.QUEUED
+    assert completed.error == "simulated follow-up enqueue crash"
+    durable = queue.get(parent.id)
+    assert durable is not None
+    assert durable.status == JobStatus.QUEUED
+    assert queue.size() == 2
+    assert queue.dequeue().id == parent.id or queue.dequeue() is not None
+
+
 def test_worker_enqueues_follow_up_before_ack():
     class RecordingQueue(InMemoryJobQueue):
         def __init__(self):
