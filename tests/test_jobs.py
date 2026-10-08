@@ -204,6 +204,15 @@ def test_follow_up_enqueue_failure_keeps_parent_retryable():
     assert queue.size() == 2
     assert queue.get(parent.id) is completed
 
+    retried = worker.run_once()
+
+    assert retried.status == JobStatus.SUCCEEDED
+    assert queue.get(parent.id) is None
+    assert queue.size() == 1
+    remaining = queue.dequeue()
+    assert remaining is not None
+    assert remaining.idempotency_key == f"process-intelligence:{parent.id}:1"
+
 
 def test_worker_enqueues_follow_up_before_ack():
     class RecordingQueue(InMemoryJobQueue):
