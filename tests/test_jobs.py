@@ -198,7 +198,8 @@ def test_follow_up_enqueue_failure_keeps_parent_retryable():
     assert durable is not None
     assert durable.status == JobStatus.QUEUED
     assert queue.size() == 2
-    assert queue.dequeue().id == parent.id or queue.dequeue() is not None
+    pending_ids = {queue.dequeue().id, queue.dequeue().id}
+    assert parent.id in pending_ids
 
 
 def test_worker_enqueues_follow_up_before_ack():
