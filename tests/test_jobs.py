@@ -201,9 +201,8 @@ def test_follow_up_enqueue_failure_keeps_parent_retryable():
     child = queue.dequeue()
     assert child is not None
     assert child.idempotency_key == f"process-intelligence:{parent.id}:0"
-    pending = queue.dequeue()
-    assert pending is not None
-    assert pending.id == parent.id
+    assert queue.size() == 1
+    assert queue.get(parent.id) is completed
 
 
 def test_worker_enqueues_follow_up_before_ack():
