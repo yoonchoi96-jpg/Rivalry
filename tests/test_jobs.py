@@ -182,7 +182,7 @@ def test_follow_up_enqueue_failure_keeps_parent_retryable():
         max_attempts=2,
     ))
     # The parent enqueue is call #1. The worker's two children are #2 and #3.
-    worker = JobWorker(queue)
+    worker = JobWorker(queue, retry_base_seconds=0)
 
     # Supply the successful collection result directly through the handler.
     worker.handlers[JobType.COLLECT_COMPETITOR] = lambda _: {
