@@ -114,6 +114,13 @@ class RedisJobQueue:
             self.client.xack(self.stream, self.group, message_id)
             return None
 
+        # A successful durable state can remain pending if the worker crashes
+        # after follow-up enqueue but before ACK. The follow-up is already
+        # idempotent, so never execute the completed parent handler again.
+        if current_job is not None and current_job.status == JobStatus.SUCCEEDED:
+            self.client.xack(self.stream, self.group, message_id)
+            return None
+
         self._message_ids[queued_job.id] = message_id
         return current_job or queued_job
 
