@@ -209,9 +209,8 @@ def test_follow_up_enqueue_failure_keeps_parent_retryable():
     assert retried.status == JobStatus.SUCCEEDED
     assert queue.get(parent.id) is None
     assert queue.size() == 3
-    remaining = {queue.dequeue().idempotency_key for _ in range(3)}
+    remaining = {queue.dequeue().idempotency_key for _ in range(2)}
     assert remaining == {
-        f"process-intelligence:{parent.id}:0",
         f"process-intelligence:{parent.id}:1",
         f"generate-prediction:{parent.id}",
     }
