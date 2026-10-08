@@ -191,6 +191,24 @@ def test_queue_metrics_expose_stream_pending_delayed_and_dlq():
     assert queue.metrics()["delayed"] == 1
 
 
+def test_stale_redis_delivery_is_acknowledged_after_durable_requeue():
+    store = InMemoryJobStore()
+    redis = FakeRedis()
+    queue = RedisJobQueue("redis://unused", job_store=store, client=redis)
+    job = queue.enqueue(Job(type=JobType.BUILD_ALERT, idempotency_key="stale-123"))
+    stale_entry = redis.stream[0]
+
+    current = store.get(job.id)
+    current.enqueue_version += 1
+    current.status = "queued"
+    store.save(current)
+
+    decoded = queue._decode_entry(stale_entry)
+
+    assert decoded is None
+    assert redis.acked[-1][-1] == stale_entry[0]
+
+
 def test_outbox_reconciliation_publishes_pending_job_once():
     store = InMemoryJobStore()
     redis = FakeRedis()
