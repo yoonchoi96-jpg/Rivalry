@@ -216,6 +216,38 @@ def test_follow_up_enqueue_failure_keeps_parent_retryable():
     }
 
 
+
+def test_parent_stays_running_until_all_follow_ups_are_enqueued():
+    class InspectingQueue(InMemoryJobQueue):
+        def __init__(self):
+            super().__init__()
+            self.parent_status_during_follow_up = None
+            self.parent_id = None
+
+        def enqueue(self, job):
+            if self.parent_id is not None and job.idempotency_key:
+                parent = self.get(self.parent_id)
+                if parent is not None:
+                    self.parent_status_during_follow_up = parent.status
+            return super().enqueue(job)
+
+    queue = InspectingQueue()
+    parent = queue.enqueue(Job(
+        type=JobType.COLLECT_COMPETITOR,
+        result={},
+    ))
+    queue.parent_id = parent.id
+    worker = JobWorker(queue)
+    worker.handlers[JobType.COLLECT_COMPETITOR] = lambda _: {
+        "changes": [{"id": "c1"}],
+        "competitor": {"id": "comp-1"},
+    }
+
+    completed = worker.run_once()
+
+    assert completed.status == JobStatus.SUCCEEDED
+    assert queue.parent_status_during_follow_up == JobStatus.RUNNING
+
 def test_worker_enqueues_follow_up_before_ack():
     class RecordingQueue(InMemoryJobQueue):
         def __init__(self):
