@@ -10,7 +10,7 @@ class JobStatus(StrEnum):
 class JobType(StrEnum):
     COLLECT_COMPETITOR="collect_competitor"; PROCESS_INTELLIGENCE="process_intelligence"
     BUILD_ALERT="build_alert"; ANALYZE_REVIEWS="analyze_reviews"; GENERATE_PREDICTION="generate_prediction"
-    EXECUTE_RESEARCH="execute_research"; GENERATE_DECISION="generate_decision"
+    EXECUTE_RESEARCH="execute_research"; INGEST_RESEARCH="ingest_research"; REPROCESS_OBSERVATION="reprocess_observation"; GENERATE_DECISION="generate_decision"; DISPATCH_ACTION="dispatch_action"
 
 class Job(BaseModel):
     id:str=Field(default_factory=lambda:str(uuid4()))
@@ -23,3 +23,4 @@ class Job(BaseModel):
     result:dict[str,object]|None=None
     attempts:int=Field(default=0,ge=0); max_attempts:int=Field(default=3,ge=1,le=10)
     next_attempt_at:str|None=None; enqueue_version:int=Field(default=0,ge=0)
+

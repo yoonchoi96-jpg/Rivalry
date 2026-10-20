@@ -81,33 +81,82 @@ class PostgresJobStore(JobStore):
     def prepare_enqueue(self, job: Job) -> Job:
         params = self._params(job)
         with self._connect(self.dsn) as conn, conn.cursor() as cur:
+            inserted = False
             if job.idempotency_key:
-                cur.execute(self._SELECT + " WHERE idempotency_key=%s", (job.idempotency_key,))
-                existing = cur.fetchone()
-                if existing is not None and existing[0] != job.id:
-                    return self._row_to_job(existing)
-            cur.execute(
-                """
-                INSERT INTO jobs (
-                    id, type, payload_json, idempotency_key, status, created_at, started_at,
-                    finished_at, error, result_json, attempts, max_attempts, next_attempt_at,
-                    enqueue_version
+                # The partial unique index is the concurrency authority. The
+                # pre-check is only a fast path; concurrent callers can race.
+                cur.execute(
+                    """
+                    INSERT INTO jobs (
+                        id, type, payload_json, idempotency_key, status, created_at, started_at,
+                        finished_at, error, result_json, attempts, max_attempts, next_attempt_at,
+                        enqueue_version
+                    )
+                    VALUES (
+                        %(id)s, %(type)s, %(payload_json)s, %(idempotency_key)s, %(status)s,
+                        %(created_at)s::timestamptz, %(started_at)s::timestamptz,
+                        %(finished_at)s::timestamptz, %(error)s, %(result_json)s,
+                        %(attempts)s, %(max_attempts)s, %(next_attempt_at)s::timestamptz,
+                        %(enqueue_version)s
+                    )
+                    ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+                    RETURNING id
+                    """,
+                    params,
                 )
-                VALUES (
-                    %(id)s, %(type)s, %(payload_json)s, %(idempotency_key)s, %(status)s,
-                    %(created_at)s::timestamptz, %(started_at)s::timestamptz,
-                    %(finished_at)s::timestamptz, %(error)s, %(result_json)s,
-                    %(attempts)s, %(max_attempts)s, %(next_attempt_at)s::timestamptz,
-                    %(enqueue_version)s
+                inserted = cur.fetchone() is not None
+                if not inserted:
+                    cur.execute(self._SELECT + " WHERE idempotency_key=%s", (job.idempotency_key,))
+                    existing = cur.fetchone()
+                    if existing is None:
+                        raise RuntimeError("job idempotency conflict could not be resolved")
+                    if existing[0] != job.id:
+                        return self._row_to_job(existing)
+
+                    # A retry/requeue keeps the same job id and idempotency key.
+                    # Refresh the durable job row before updating the outbox so
+                    # the outbox version and the job state always describe the
+                    # same enqueue attempt.
+                    cur.execute(
+                        """
+                        UPDATE jobs SET
+                            type=%(type)s, payload_json=%(payload_json)s,
+                            idempotency_key=%(idempotency_key)s, status=%(status)s,
+                            started_at=%(started_at)s::timestamptz,
+                            finished_at=%(finished_at)s::timestamptz, error=%(error)s,
+                            result_json=%(result_json)s, attempts=%(attempts)s,
+                            max_attempts=%(max_attempts)s,
+                            next_attempt_at=%(next_attempt_at)s::timestamptz,
+                            enqueue_version=%(enqueue_version)s
+                        WHERE id=%(id)s
+                        """,
+                        params,
+                    )
+
+            if not job.idempotency_key:
+                cur.execute(
+                    """
+                    INSERT INTO jobs (
+                        id, type, payload_json, idempotency_key, status, created_at, started_at,
+                        finished_at, error, result_json, attempts, max_attempts, next_attempt_at,
+                        enqueue_version
+                    )
+                    VALUES (
+                        %(id)s, %(type)s, %(payload_json)s, %(idempotency_key)s, %(status)s,
+                        %(created_at)s::timestamptz, %(started_at)s::timestamptz,
+                        %(finished_at)s::timestamptz, %(error)s, %(result_json)s,
+                        %(attempts)s, %(max_attempts)s, %(next_attempt_at)s::timestamptz,
+                        %(enqueue_version)s
+                    )
+                    ON CONFLICT (id) DO UPDATE SET
+                        status=EXCLUDED.status,
+                        payload_json=EXCLUDED.payload_json,
+                        enqueue_version=EXCLUDED.enqueue_version,
+                        next_attempt_at=EXCLUDED.next_attempt_at
+                    """,
+                    params,
                 )
-                ON CONFLICT (id) DO UPDATE SET
-                    status=EXCLUDED.status,
-                    payload_json=EXCLUDED.payload_json,
-                    enqueue_version=EXCLUDED.enqueue_version,
-                    next_attempt_at=EXCLUDED.next_attempt_at
-                """,
-                params,
-            )
+
             cur.execute(
                 """
                 INSERT INTO job_outbox (job_id, enqueue_version, created_at)
@@ -127,8 +176,17 @@ class PostgresJobStore(JobStore):
     def pending_outbox(self, limit: int = 100) -> list[Job]:
         with self._connect(self.dsn) as conn, conn.cursor() as cur:
             cur.execute(
-                self._SELECT.replace("FROM jobs", "FROM job_outbox o JOIN jobs j ON j.id=o.job_id") +
-                " WHERE o.published_at IS NULL ORDER BY o.created_at ASC LIMIT %s",
+                """
+                SELECT j.id, j.type, j.payload_json, j.idempotency_key, j.status,
+                       j.created_at, j.started_at, j.finished_at, j.error, j.result_json,
+                       j.attempts, j.max_attempts, j.next_attempt_at, j.enqueue_version
+                FROM job_outbox o
+                JOIN jobs j ON j.id = o.job_id
+                WHERE o.published_at IS NULL
+                  AND (j.next_attempt_at IS NULL OR j.next_attempt_at <= NOW())
+                ORDER BY o.created_at ASC
+                LIMIT %s
+                """,
                 (limit,),
             )
             rows = cur.fetchall()
@@ -143,6 +201,20 @@ class PostgresJobStore(JobStore):
                 """,
                 (job_id, enqueue_version),
             )
+
+    def count_scheduled(self) -> int:
+        with self._connect(self.dsn) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM job_outbox o
+                JOIN jobs j ON j.id=o.job_id
+                WHERE o.published_at IS NULL
+                  AND j.next_attempt_at IS NOT NULL
+                  AND j.next_attempt_at > NOW()
+                """
+            )
+            return int(cur.fetchone()[0])
 
     @staticmethod
     def _row_to_job(row: tuple[Any, ...]) -> Job:

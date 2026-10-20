@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import json
 from typing import Callable
 
 from .models import Job, JobStatus, JobType
@@ -33,26 +35,90 @@ class JobWorker:
             if not isinstance(changes, list):
                 return []
             jobs = [
-                Job(type=JobType.PROCESS_INTELLIGENCE, payload={"change": change})
-                for change in changes
+                Job(
+                    type=JobType.PROCESS_INTELLIGENCE,
+                    payload={"change": change},
+                    idempotency_key=f"process-intelligence:{job.id}:{index}",
+                )
+                for index, change in enumerate(changes)
                 if isinstance(change, dict)
             ]
             reviews = job.result.get("reviews", [])
             competitor = job.result.get("competitor", {})
             if isinstance(reviews, list) and reviews and isinstance(competitor, dict):
-                jobs.append(Job(type=JobType.ANALYZE_REVIEWS, payload={"reviews": reviews, "days": 3}))
+                jobs.append(Job(
+                    type=JobType.ANALYZE_REVIEWS,
+                    payload={"reviews": reviews, "days": 3},
+                    idempotency_key=f"analyze-reviews:{job.id}",
+                ))
             if changes and isinstance(competitor, dict) and competitor.get("id"):
                 jobs.append(Job(
                     type=JobType.GENERATE_PREDICTION,
                     payload={"competitor_id": competitor["id"], "changes": changes},
+                    idempotency_key=f"generate-prediction:{job.id}",
                 ))
             return jobs
+        if job.type == JobType.GENERATE_DECISION:
+            recommendation = job.result.get("recommendation")
+            if isinstance(recommendation, dict):
+                # Canonicalize policy aliases before deriving the action job identity.
+                # This keeps alias-equivalent recommendations idempotent end-to-end.
+                from core.action.dispatcher import ActionDispatcher
+                from core.decision.models import DecisionRecommendation
+
+                typed_recommendation = DecisionRecommendation.model_validate(recommendation)
+                canonical_action = ActionDispatcher().dispatch(typed_recommendation).action
+                canonical_recommendation = typed_recommendation.model_copy(
+                    update={"action": canonical_action}
+                ).model_dump(mode="json")
+                revision = sha256(
+                    json.dumps(
+                        canonical_recommendation,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()[:16]
+                return [Job(
+                    type=JobType.DISPATCH_ACTION,
+                    payload={"recommendation": canonical_recommendation},
+                    idempotency_key=f"action:{canonical_recommendation.get('impact_id', job.id)}:{revision}",
+                )]
+        if job.type == JobType.DISPATCH_ACTION:
+            action = job.result.get("action")
+            if isinstance(action, dict):
+                follow_up_job = action.get("follow_up_job")
+                payload = action.get("follow_up_payload")
+                if isinstance(follow_up_job, str) and isinstance(payload, dict):
+                    revision = sha256(
+                        json.dumps(action, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                    ).hexdigest()[:16]
+                    return [Job(
+                        type=JobType(follow_up_job),
+                        payload=payload,
+                        idempotency_key=f"followup:{action.get('recommendation_id', job.id)}:{revision}:{follow_up_job}",
+                    )]
+        if job.type == JobType.EXECUTE_RESEARCH:
+            return [Job(
+                type=JobType.INGEST_RESEARCH,
+                payload={"research": job.result, "business_id": job.payload.get("business_id"), "policy_id": job.payload.get("policy_id"), "exposure": job.payload.get("exposure", 0.5)},
+                idempotency_key=f"ingest-research:{job.id}",
+            )]
+        if job.type == JobType.INGEST_RESEARCH:
+            observations = job.result.get("observations", [])
+            return [Job(type=JobType.REPROCESS_OBSERVATION, payload={"observation": item, "business_id": job.payload.get("business_id"), "policy_id": job.payload.get("policy_id"), "exposure": job.payload.get("exposure", 0.5)}, idempotency_key=f"reprocess:{item.get('id', job.id)}:{job.payload.get('policy_id', 'default')}") for item in observations if isinstance(item, dict)]
+        if job.type == JobType.REPROCESS_OBSERVATION:
+            impact = job.result.get("impact")
+            policy_id = job.result.get("policy_id")
+            if isinstance(impact, dict) and isinstance(policy_id, str) and policy_id:
+                return [Job(type=JobType.GENERATE_DECISION, payload={"impact_id": impact.get("id"), "policy_id": policy_id}, idempotency_key=f"research-decision:{impact.get('id')}:{policy_id}")]
+            return []
         if job.type == JobType.PROCESS_INTELLIGENCE:
             change = job.payload.get("change")
             if isinstance(change, dict):
                 return [Job(
                     type=JobType.BUILD_ALERT,
                     payload={"change": change, "intelligence": job.result},
+                    idempotency_key=f"build-alert:{job.id}",
                 )]
         return []
 
@@ -78,7 +144,6 @@ class JobWorker:
         job.next_attempt_at = (
             datetime.now(timezone.utc) + timedelta(seconds=delay)
         ).isoformat()
-        self.queue.update(job)
         requeue = getattr(self.queue, "requeue", None)
         if callable(requeue):
             try:
@@ -86,6 +151,7 @@ class JobWorker:
             except TypeError:
                 requeue(job)
         else:
+            self.queue.update(job)
             self.queue.enqueue(job)
 
     def run_once(self) -> Job | None:
@@ -103,7 +169,16 @@ class JobWorker:
             if handler is None:
                 raise ValueError(f"No handler registered for job type: {job.type.value}")
             job.result = handler(job) or {}
+
+            # Keep the durable parent RUNNING until every follow-up has been
+            # durably enqueued. If a follow-up enqueue crashes halfway through,
+            # the parent remains reclaimable and deterministic child identities
+            # make already-enqueued follow-ups safe to repeat. Marking the
+            # parent SUCCEEDED before this loop could cause Redis redelivery
+            # fencing to ACK it and permanently lose the remaining children.
             job.status = JobStatus.SUCCEEDED
+            for follow_up in self._follow_up_jobs(job):
+                self.queue.enqueue(follow_up)
             job.error = None
         except Exception as exc:
             job.status = JobStatus.FAILED
@@ -124,9 +199,6 @@ class JobWorker:
                 job.next_attempt_at = None
                 self.queue.update(job)
                 self._dead_letter(job)
-        if job.status == JobStatus.SUCCEEDED:
-            for follow_up in self._follow_up_jobs(job):
-                self.queue.enqueue(follow_up)
         return job
 
     def drain(self, limit: int | None = None) -> list[Job]:

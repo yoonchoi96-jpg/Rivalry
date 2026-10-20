@@ -22,3 +22,19 @@ def test_in_memory_job_store_deduplicates_idempotency_key():
     )
     assert second.id == first.id
     assert store.get_by_idempotency_key("alert-123").id == first.id
+
+
+def test_in_memory_outbox_honors_next_attempt_at():
+    from datetime import datetime, timedelta, timezone
+
+    store = InMemoryJobStore()
+    future = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+    job = Job(type=JobType.BUILD_ALERT, next_attempt_at=future)
+    store.prepare_enqueue(job)
+    assert store.pending_outbox() == []
+    assert store.count_scheduled() == 1
+
+    job.next_attempt_at = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    store.prepare_enqueue(job)
+    assert [item.id for item in store.pending_outbox()] == [job.id]
+    assert store.count_scheduled() == 0

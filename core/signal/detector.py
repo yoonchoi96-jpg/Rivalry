@@ -13,7 +13,7 @@ def direction(current: float, reference: float, *, epsilon: float = 1e-12) -> Si
 def detect_change(current: float, reference: float) -> tuple[float, float, SignalDirection]:
     delta = current - reference
     delta_pct = None if reference == 0 else (delta / abs(reference)) * 100
-    return delta, delta_pct, direction(current, reference)
+    return round(delta, 12), round(delta_pct, 12) if delta_pct is not None else None, direction(current, reference)
 
 
 def detect_threshold(current: float, threshold: float) -> SignalDirection | None:

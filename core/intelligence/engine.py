@@ -63,6 +63,9 @@ class IntelligenceStore:
     def alerts(self) -> list[dict[str, object]]:
         return self.repository.all_alerts()
 
+    def all_alerts(self) -> list[dict[str, object]]:
+        return self.alerts
+
     def record_changes(self, changes: list[Change]) -> None:
         self.repository.record_changes(changes)
 

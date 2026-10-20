@@ -3,6 +3,8 @@ from core.jobs.runtime import (
     decision_policy_registry,
     decision_recommendation_repository,
     evidence_repository,
+    observation_repository,
+    measurement_repository,
     impact_repository,
     intelligence_store,
     job_queue,
@@ -20,6 +22,8 @@ handlers_obj = JobHandlers(
     decision_policies=decision_policy_registry,
     decision_recommendations=decision_recommendation_repository,
     signal_repository=signal_repository,
+    observation_repository=observation_repository,
+    measurement_repository=measurement_repository,
 )
 handlers_obj.research = research
 worker = JobWorker(job_queue, handlers_obj.registry())

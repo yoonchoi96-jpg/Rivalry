@@ -1,3 +1,5 @@
+import time
+
 from core.jobs.models import Job, JobStatus, JobType
 from core.jobs.queue import InMemoryJobQueue
 from core.jobs.worker import JobWorker
@@ -15,7 +17,7 @@ def test_worker_retries_then_succeeds():
             raise RuntimeError("temporary")
         return {"ok": True}
 
-    worker = JobWorker(queue, {JobType.BUILD_ALERT: flaky})
+    worker = JobWorker(queue, {JobType.BUILD_ALERT: flaky}, retry_base_seconds=0)
     first = worker.run_once()
     assert first.status == JobStatus.QUEUED
     assert first.attempts == 1
@@ -32,7 +34,7 @@ def test_worker_marks_terminal_failure_after_max_attempts():
     def broken(_job):
         raise RuntimeError("permanent")
 
-    worker = JobWorker(queue, {JobType.BUILD_ALERT: broken})
+    worker = JobWorker(queue, {JobType.BUILD_ALERT: broken}, retry_base_seconds=0)
     worker.run_once()
     final = worker.run_once()
     assert final.status == JobStatus.FAILED
@@ -47,11 +49,12 @@ def test_worker_exponential_backoff_is_recorded():
     worker = JobWorker(
         queue,
         {JobType.BUILD_ALERT: lambda _job: (_ for _ in ()).throw(RuntimeError("temporary"))},
-        retry_base_seconds=2,
+        retry_base_seconds=0.001,
     )
     first = worker.run_once()
     assert first.next_attempt_at is not None
     first_next_attempt_at = first.next_attempt_at
+    time.sleep(0.01)
     second = worker.run_once()
     assert second.next_attempt_at is not None
     assert second.next_attempt_at > first_next_attempt_at

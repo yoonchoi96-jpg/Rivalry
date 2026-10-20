@@ -22,7 +22,7 @@ def test_run_worker_stops_on_signal(monkeypatch):
             return None
 
     monkeypatch.setattr(entrypoint, "JobWorker", FakeWorker)
-    monkeypatch.setattr(entrypoint, "JobHandlers", lambda store: type(
+    monkeypatch.setattr(entrypoint, "JobHandlers", lambda store, **_kwargs: type(
         "Handlers",
         (),
         {"registry": lambda self: {JobType.COLLECT_COMPETITOR: object()}},

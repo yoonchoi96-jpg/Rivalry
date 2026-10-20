@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from threading import Lock
 from typing import Protocol
 
@@ -13,6 +14,7 @@ class JobStore(Protocol):
     def prepare_enqueue(self, job: Job) -> Job: ...
     def pending_outbox(self, limit: int = 100) -> list[Job]: ...
     def mark_outbox_published(self, job_id: str, enqueue_version: int) -> None: ...
+    def count_scheduled(self) -> int: ...
 
 
 class InMemoryJobStore:
@@ -46,17 +48,38 @@ class InMemoryJobStore:
 
     def pending_outbox(self, limit: int = 100) -> list[Job]:
         with self._lock:
-            ids = list(self._outbox)[:limit]
-            return [
-                Job.model_validate(self._jobs[job_id].model_dump(mode="json"))
-                for job_id in ids
-                if job_id in self._jobs
-            ]
+            now = datetime.now(timezone.utc)
+            result: list[Job] = []
+            for job_id in self._outbox:
+                if len(result) >= limit:
+                    break
+                job = self._jobs.get(job_id)
+                if job is None:
+                    continue
+                if job.next_attempt_at:
+                    due = datetime.fromisoformat(job.next_attempt_at)
+                    if due.tzinfo is None:
+                        due = due.replace(tzinfo=timezone.utc)
+                    if due > now:
+                        continue
+                result.append(Job.model_validate(job.model_dump(mode="json")))
+            return result
 
     def mark_outbox_published(self, job_id: str, enqueue_version: int) -> None:
         with self._lock:
             if self._outbox.get(job_id) == enqueue_version:
                 self._outbox.pop(job_id, None)
+
+    def count_scheduled(self) -> int:
+        with self._lock:
+            now = datetime.now(timezone.utc)
+            return sum(
+                1
+                for job_id in self._outbox
+                if job_id in self._jobs
+                and self._jobs[job_id].next_attempt_at
+                and datetime.fromisoformat(self._jobs[job_id].next_attempt_at) > now
+            )
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
