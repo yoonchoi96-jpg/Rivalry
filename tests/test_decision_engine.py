@@ -44,33 +44,33 @@ def make_impact() -> BusinessImpact:
     )
 
 
-def test_decision_engine_uses_declarative_policy_and_preserves_lineage():
-    recommendation = DecisionEngine().recommend(
-        make_impact(),
-        make_signal(),
-        DecisionPolicy(
-            id="test-v1",
-            name="test",
-            default_action="monitor",
-            default_rationale="keep observing",
-            rules=[
-                DecisionPolicyRule(
-                    factor_key="competitive_price",
-                    min_impact=0.2,
-                    max_impact=1.0,
-                    action="review",
-                    rationale="material impact requires review",
-                )
-            ],
-        ),
+def make_policy() -> DecisionPolicy:
+    return DecisionPolicy(
+        id="test-v1",
+        name="test",
+        default_action="monitor",
+        default_rationale="keep observing",
+        rules=[
+            DecisionPolicyRule(
+                factor_key="competitive_price",
+                min_impact=0.2,
+                max_impact=1.0,
+                action="review",
+                rationale="material impact requires review",
+            )
+        ],
     )
+
+
+def test_decision_engine_uses_declarative_policy_and_preserves_lineage():
+    recommendation = DecisionEngine().recommend(make_impact(), make_signal(), make_policy())
 
     assert recommendation.action == "review"
     assert recommendation.business_id == "b1"
     assert recommendation.impact_id == "i1"
     assert recommendation.signal_id == "s1"
     assert recommendation.factor_key == "competitive_price"
-    assert recommendation.priority > 0
+    assert recommendation.priority == 0.1024
     assert recommendation.policy_id == "test-v1"
 
 
@@ -78,13 +78,4 @@ def test_decision_engine_rejects_broken_lineage():
     impact = make_impact()
     impact.measurement_ids = ["wrong"]
     with pytest.raises(ValueError, match="measurement lineage"):
-        DecisionEngine().recommend(
-            impact,
-            make_signal(),
-            DecisionPolicy(
-                id="test-v1",
-                name="test",
-                default_action="monitor",
-                default_rationale="keep observing",
-            ),
-        )
+        DecisionEngine().recommend(impact, make_signal(), make_policy())
